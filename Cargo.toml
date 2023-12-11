@@ -10,6 +10,7 @@ repository = "https://github.com/filecoin-project/ref-fvm"
 crate-type = ["lib"]
 
 [dependencies]
-fvm_shared = { version = "3.2.0", path = "../../ref-fvm/shared" }
+#fvm_shared = { version = "3.2.0", path = "../ref-fvm/shared" }
+fvm_shared = { version = "3.2.0", git = "https://github.com/fluencelabs/ref-fvm", branch = "randomx" }
 ## num-traits; disabling default features makes it play nice with no_std.
 num-traits = { version = "0.2.14", default-features = false }
