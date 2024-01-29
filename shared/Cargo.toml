@@ -1,8 +1,11 @@
 [package]
 name = "fluence-fendermint-shared"
 version = "0.1.0"
-edition = "2021"
+description = "Shared data for Fluence-Fendermint integration"
 authors = ["Fluence Labs"]
+edition = "2021"
+license = "Apache-2.0"
+repository = "https://github.com/fluencelabs/fluence-fendermint/"
 publish = true
 
 [dependencies]

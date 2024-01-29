@@ -1,10 +1,11 @@
 [package]
 name = "fluence-fvm-sdk"
-description = "Fluence SDK for a FVM actor which provides RandomX syscall"
 version = "0.1.0"
+description = "Fluence SDK for a FVM actor which provides RandomX syscall"
 authors = ["Fluence Labs"]
 edition = "2021"
-repository = "https://github.com/fluencelabs/fluence-fvm-sdk"
+license = "Apache-2.0"
+repository = "https://github.com/fluencelabs/fluence-fendermint/"
 publish = true
 
 [lib]
