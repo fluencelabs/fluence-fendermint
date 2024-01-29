@@ -16,8 +16,6 @@
 
 use fvm_sdk::sys::fvm_syscalls;
 
-pub const RANDOMX_HASH_SIZE: usize = 32;
-
 fvm_syscalls! {
     module = "fluence";
 
@@ -26,5 +24,5 @@ fvm_syscalls! {
         global_nonce_len: u32,
         local_nonce_addr: *const u8,
         local_nonce_len: u32,
-    ) -> Result<[u8; RANDOMX_HASH_SIZE]>;
+    ) -> Result<[u8; crate::TARGET_HASH_SIZE]>;
 }

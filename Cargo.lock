@@ -1021,6 +1021,7 @@ version = "0.1.0"
 name = "fluence-fendermint-syscall"
 version = "0.1.0"
 dependencies = [
+ "fluence-fendermint-shared",
  "fvm",
  "fvm_shared",
  "randomx-rs",
@@ -1030,6 +1031,7 @@ dependencies = [
 name = "fluence-fvm-sdk"
 version = "0.1.0"
 dependencies = [
+ "fluence-fendermint-shared",
  "fvm_sdk",
  "fvm_shared",
  "num-traits",

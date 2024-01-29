@@ -16,12 +16,12 @@
 
 mod sys;
 
-pub use sys::RANDOMX_HASH_SIZE;
+pub use fluence_fendermint_shared::TARGET_HASH_SIZE;
 
 pub fn run_randomx(
     global_nonce: Vec<u8>,
     local_nonce: Vec<u8>,
-) -> Result<[u8; RANDOMX_HASH_SIZE], fvm_shared::error::ErrorNumber> {
+) -> Result<[u8; TARGET_HASH_SIZE], fvm_shared::error::ErrorNumber> {
     unsafe {
         sys::run_randomx(
             global_nonce.as_ptr(),

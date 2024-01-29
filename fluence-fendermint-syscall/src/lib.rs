@@ -22,7 +22,7 @@ use fvm::kernel::ExecutionError;
 use fvm::kernel::Kernel;
 use fvm::syscalls::Context;
 
-pub const TARGET_HASH_SIZE: usize = 32;
+pub use fluence_fendermint_shared::TARGET_HASH_SIZE;
 
 pub fn run_randomx(
     context: Context<'_, impl Kernel>,

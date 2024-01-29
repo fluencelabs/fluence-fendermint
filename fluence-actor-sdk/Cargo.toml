@@ -12,6 +12,8 @@ publish = true
 crate-type = ["lib"]
 
 [dependencies]
+fluence-fendermint-shared = { path = "../shared", version = "0.1.0" }
+
 fvm_shared = "4.1"
 fvm_sdk = "4.1"
 num-traits = { version = "0.2", default-features = false }
