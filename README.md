@@ -1,3 +1,5 @@
-## Fluence FVM SDK
+## Fluence Fendermint integration
 
-Contains definition of a RandomX syscall for FVM.
+Fluence integration with Fendermint, which includes
+ - [SDK](./fluence-actor-sdk) from the Fluence actor 
+ - capacity check [syscall](./fluence-fendermint-syscall) definition for Fendermint 
