@@ -1,5 +1,5 @@
 [package]
-name = "fluence-fvm-sdk"
+name = "fluence-actor-sdk"
 version = "0.1.0"
 description = "Fluence SDK for a FVM actor which provides RandomX syscall"
 authors = ["Fluence Labs"]
