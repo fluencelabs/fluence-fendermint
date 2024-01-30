@@ -1014,6 +1014,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "fluence-actor-sdk"
+version = "0.1.1"
+dependencies = [
+ "fluence-fendermint-shared",
+ "fvm_sdk",
+ "fvm_shared",
+ "num-traits",
+]
+
+[[package]]
 name = "fluence-fendermint-shared"
 version = "0.1.0"
 
@@ -1025,16 +1035,6 @@ dependencies = [
  "fvm",
  "fvm_shared",
  "randomx-rs",
-]
-
-[[package]]
-name = "fluence-fvm-sdk"
-version = "0.1.0"
-dependencies = [
- "fluence-fendermint-shared",
- "fvm_sdk",
- "fvm_shared",
- "num-traits",
 ]
 
 [[package]]
