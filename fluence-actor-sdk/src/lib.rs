@@ -17,7 +17,10 @@
 mod sys;
 
 pub use fluence_fendermint_shared::TARGET_HASH_SIZE;
+pub use fvm_shared::error::ErrorNumber;
 
+/// Run RandomX in the light mode with the supplied global (K) and local (H) nonce,
+/// return its result hash.
 pub fn run_randomx(
     global_nonce: Vec<u8>,
     local_nonce: Vec<u8>,

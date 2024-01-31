@@ -1015,7 +1015,7 @@ dependencies = [
 
 [[package]]
 name = "fluence-actor-sdk"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "fluence-fendermint-shared",
  "fvm_sdk",
