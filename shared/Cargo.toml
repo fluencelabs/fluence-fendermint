@@ -1,6 +1,6 @@
 [package]
 name = "fluence-fendermint-shared"
-version = "0.1.0"
+version = "0.1.1"
 description = "Shared data for Fluence-Fendermint integration"
 authors = ["Fluence Labs"]
 edition = "2021"

@@ -22,6 +22,8 @@ use fvm::kernel::ExecutionError;
 use fvm::kernel::Kernel;
 use fvm::syscalls::Context;
 
+pub use fluence_fendermint_shared::SYSCALL_FUNCTION_NAME;
+pub use fluence_fendermint_shared::SYSCALL_MODULE_NAME;
 pub use fluence_fendermint_shared::TARGET_HASH_SIZE;
 
 pub fn run_randomx(

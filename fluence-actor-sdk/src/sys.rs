@@ -16,6 +16,7 @@
 
 use fvm_sdk::sys::fvm_syscalls;
 
+// TODO: use fluence_fendermint_shared::SYSCALL_MODULE_NAME when fvm_syscall allows it.
 fvm_syscalls! {
     module = "fluence";
 
