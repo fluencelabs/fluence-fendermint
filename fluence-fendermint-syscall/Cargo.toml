@@ -2,7 +2,7 @@
 name = "fluence-fendermint-syscall"
 description = "Implementation of RandomX syscall for Fendermint"
 authors = ["Fluence Labs"]
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 license = "Apache-2.0"
 repository = "https://github.com/fluencelabs/fluence-fendermint/"
@@ -11,6 +11,6 @@ publish = true
 [dependencies]
 fluence-fendermint-shared = { path = "../shared", version = "0.1.1" }
 
-fvm = "4.1.0"
+fvm = { version = "4.1.0", default-features = false }
 fvm_shared = "4.1.0"
 randomx-rs = "1.3.0"
