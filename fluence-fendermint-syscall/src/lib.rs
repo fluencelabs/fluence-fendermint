@@ -14,17 +14,23 @@
  * limitations under the License.
  */
 
-use randomx_rs::RandomXCache;
-use randomx_rs::RandomXFlag;
-use randomx_rs::RandomXVM;
+use num_traits::cast::FromPrimitive;
+
+use randomx_rust_wrapper::cache::Cache;
+use randomx_rust_wrapper::flags::RandomXFlags;
+use randomx_rust_wrapper::vm::RandomXVM;
 
 use fvm::kernel::ExecutionError;
 use fvm::kernel::Kernel;
+use fvm::kernel::SyscallError;
 use fvm::syscalls::Context;
+use fvm_shared::error::ErrorNumber;
 
 pub use fluence_fendermint_shared::SYSCALL_FUNCTION_NAME;
 pub use fluence_fendermint_shared::SYSCALL_MODULE_NAME;
 pub use fluence_fendermint_shared::TARGET_HASH_SIZE;
+
+const RANDOMX_SYSCALL_ERROR_CODE: u32 = 0x31338;
 
 pub fn run_randomx(
     context: Context<'_, impl Kernel>,
@@ -40,14 +46,18 @@ pub fn run_randomx(
         .memory
         .try_slice(local_nonce_addr, local_nonce_len)?;
 
-    let randomx_flags = RandomXFlag::get_recommended_flags();
-    let cache = RandomXCache::new(randomx_flags, global_nonce).unwrap();
-    let vm = RandomXVM::new(randomx_flags, Some(cache), None).unwrap();
-    let hash = vm.calculate_hash(local_nonce).unwrap();
-    let mut result = [0u8; TARGET_HASH_SIZE];
+    let randomx_flags = RandomXFlags::recommended();
+    let cache = Cache::new(randomx_flags, global_nonce).map_err(|e| {
+        let error_number = ErrorNumber::from_u32(RANDOMX_SYSCALL_ERROR_CODE).unwrap();
+        let syscall_error = SyscallError::new(error_number, e);
+        ExecutionError::Syscall(syscall_error)
+    })?;
+    let vm = RandomXVM::light(randomx_flags, &cache).map_err(|e| {
+        let error_number = ErrorNumber::from_u32(RANDOMX_SYSCALL_ERROR_CODE).unwrap();
+        let syscall_error = SyscallError::new(error_number, e);
+        ExecutionError::Syscall(syscall_error)
+    });
 
-    // TODO: write RandomX wrapper crate to avoid such copying
-    result[..32].copy_from_slice(&hash[..32]);
-
-    Ok(result)
+    let result_hash = vm.calculate_hash(local_nonce);
+    Ok(result_hash.into_slice())
 }
