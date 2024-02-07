@@ -30,7 +30,7 @@ pub use fluence_fendermint_shared::SYSCALL_FUNCTION_NAME;
 pub use fluence_fendermint_shared::SYSCALL_MODULE_NAME;
 pub use fluence_fendermint_shared::TARGET_HASH_SIZE;
 
-const RANDOMX_SYSCALL_ERROR_CODE: u32 = 0x31338;
+const RANDOMX_SYSCALL_ERROR_CODE: u32 = 0x10000001;
 
 pub fn run_randomx(
     context: Context<'_, impl Kernel>,

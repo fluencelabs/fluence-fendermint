@@ -996,7 +996,7 @@ version = "0.1.1"
 
 [[package]]
 name = "fluence-fendermint-syscall"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "fluence-fendermint-shared",
  "fvm",
