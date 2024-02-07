@@ -56,7 +56,7 @@ pub fn run_randomx(
         let error_number = ErrorNumber::from_u32(RANDOMX_SYSCALL_ERROR_CODE).unwrap();
         let syscall_error = SyscallError::new(error_number, e);
         ExecutionError::Syscall(syscall_error)
-    });
+    })?;
 
     let result_hash = vm.calculate_hash(local_nonce);
     Ok(result_hash.into_slice())
