@@ -47,17 +47,17 @@ pub fn run_randomx(
         .try_slice(local_nonce_addr, local_nonce_len)?;
 
     let randomx_flags = RandomXFlags::recommended();
-    let cache = Cache::new(randomx_flags, global_nonce).map_err(|e| {
+    let cache = Cache::new(global_nonce, randomx_flags).map_err(|e| {
         let error_number = ErrorNumber::from_u32(RANDOMX_SYSCALL_ERROR_CODE).unwrap();
         let syscall_error = SyscallError::new(error_number, e);
         ExecutionError::Syscall(syscall_error)
     })?;
-    let vm = RandomXVM::light(randomx_flags, &cache).map_err(|e| {
+    let vm = RandomXVM::light(&cache, randomx_flags).map_err(|e| {
         let error_number = ErrorNumber::from_u32(RANDOMX_SYSCALL_ERROR_CODE).unwrap();
         let syscall_error = SyscallError::new(error_number, e);
         ExecutionError::Syscall(syscall_error)
     })?;
 
-    let result_hash = vm.calculate_hash(local_nonce);
+    let result_hash = vm.hash(local_nonce);
     Ok(result_hash.into_slice())
 }

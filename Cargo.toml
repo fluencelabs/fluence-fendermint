@@ -14,4 +14,4 @@ fvm_shared = "4.1.0"
 fvm_sdk = "4.1.0"
 num-traits = { version = "0.2", default-features = false }
 
-randomx-rust-wrapper = "0.1.1"
+randomx-rust-wrapper = "0.1.3"
