@@ -16,9 +16,9 @@
 
 use num_traits::cast::FromPrimitive;
 
-use randomx_rust_wrapper::cache::Cache;
-use randomx_rust_wrapper::flags::RandomXFlags;
-use randomx_rust_wrapper::vm::RandomXVM;
+use ccp_randomx::cache::Cache;
+use ccp_randomx::flags::RandomXFlags;
+use ccp_randomx::vm::RandomXVM;
 
 use fvm::kernel::ExecutionError;
 use fvm::kernel::Kernel;
@@ -52,7 +52,7 @@ pub fn run_randomx(
         let syscall_error = SyscallError::new(error_number, e);
         ExecutionError::Syscall(syscall_error)
     })?;
-    let vm = RandomXVM::light(&cache, randomx_flags).map_err(|e| {
+    let vm = RandomXVM::light(cache, randomx_flags).map_err(|e| {
         let error_number = ErrorNumber::from_u32(RANDOMX_SYSCALL_ERROR_CODE).unwrap();
         let syscall_error = SyscallError::new(error_number, e);
         ExecutionError::Syscall(syscall_error)

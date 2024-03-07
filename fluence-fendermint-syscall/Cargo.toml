@@ -15,4 +15,5 @@ fvm = { workspace = true }
 fvm_shared = { workspace = true }
 num-traits = { workspace = true }
 
-randomx-rust-wrapper = { workspace = true }
+ccp-randomx = { workspace = true }
+ccp-shared = { workspace = true }
