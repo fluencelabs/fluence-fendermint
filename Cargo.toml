@@ -8,7 +8,8 @@ members = [
 
 [workspace.dependencies]
 fluence-fendermint-shared = { path = "./shared", version = "0.1.1" }
-randomx-rust-wrapper = "0.1.3"
+ccp-randomx = "0.2.0"
+ccp-shared = "0.1.0"
 
 fvm = { version = "4.1.0", default-features = false }
 fvm_shared = "4.1.0"

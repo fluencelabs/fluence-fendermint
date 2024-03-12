@@ -33,8 +33,8 @@ pub use fluence_fendermint_shared::TARGET_HASH_SIZE;
 /// Run RandomX in the light mode with the supplied global (K) and local (H) nonce,
 /// return its result hash.
 pub fn run_randomx(
-    global_nonce: Vec<u8>,
-    local_nonce: Vec<u8>,
+    global_nonce: &[u8],
+    local_nonce: &[u8],
 ) -> Result<[u8; TARGET_HASH_SIZE], fvm_shared::error::ErrorNumber> {
     unsafe {
         sys::run_randomx(

@@ -29,9 +29,9 @@
 use num_traits::cast::FromPrimitive;
 use std::fmt::Display;
 
-use randomx_rust_wrapper::cache::Cache;
-use randomx_rust_wrapper::flags::RandomXFlags;
-use randomx_rust_wrapper::vm::RandomXVM;
+use ccp_randomx::cache::Cache;
+use ccp_randomx::flags::RandomXFlags;
+use ccp_randomx::vm::RandomXVM;
 
 use fvm::kernel::ExecutionError;
 use fvm::kernel::Kernel;
@@ -106,7 +106,7 @@ fn compute_randomx_hash(
 ) -> Result<[u8; TARGET_HASH_SIZE], ExecutionError> {
     let cache = Cache::new(global_nonce, randomx_flags)
         .map_err(|e| execution_error(RANDOMX_SYSCALL_ERROR_CODE, e))?;
-    let vm = RandomXVM::light(&cache, randomx_flags)
+    let vm = RandomXVM::light(cache, randomx_flags)
         .map_err(|e| execution_error(RANDOMX_SYSCALL_ERROR_CODE, e))?;
 
     Ok(vm.hash(local_nonce).into_slice())
