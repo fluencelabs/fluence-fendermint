@@ -14,6 +14,18 @@
  * limitations under the License.
  */
 
+#![warn(rust_2018_idioms)]
+#![warn(rust_2021_compatibility)]
+#![deny(
+    dead_code,
+    nonstandard_style,
+    unused_imports,
+    unused_mut,
+    unused_variables,
+    unused_unsafe,
+    unreachable_patterns
+)]
+
 /// Size in bytes of a result of RandomX invocation, which is basically a hash.
 pub const TARGET_HASH_SIZE: usize = 32;
 

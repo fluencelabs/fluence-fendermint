@@ -26,4 +26,12 @@ fvm_syscalls! {
         local_nonce_addr: *const u8,
         local_nonce_len: u32,
     ) -> Result<[u8; crate::TARGET_HASH_SIZE]>;
+
+    #[allow(improper_ctypes)]
+    pub fn run_randomx_batched(
+        global_nonce_addr: *const (*const u8, usize),
+        global_nonce_len: u32,
+        local_nonce_addr: *const (*const u8, usize),
+        local_nonce_len: u32,
+    ) -> Result<[u8; crate::TARGET_HASH_SIZE]>;
 }

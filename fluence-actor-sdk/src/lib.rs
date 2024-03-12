@@ -14,10 +14,21 @@
  * limitations under the License.
  */
 
+#![warn(rust_2018_idioms)]
+#![warn(rust_2021_compatibility)]
+#![deny(
+    dead_code,
+    nonstandard_style,
+    unused_imports,
+    unused_mut,
+    unused_variables,
+    unused_unsafe,
+    unreachable_patterns
+)]
+
 mod sys;
 
 pub use fluence_fendermint_shared::TARGET_HASH_SIZE;
-pub use fvm_shared::error::ErrorNumber;
 
 /// Run RandomX in the light mode with the supplied global (K) and local (H) nonce,
 /// return its result hash.
@@ -33,4 +44,27 @@ pub fn run_randomx(
             local_nonce.len() as u32,
         )
     }
+}
+
+/// Run RandomX in the light mode with the supplied global (K) and local (H) nonce,
+/// return its result hash.
+pub fn run_randomx_batched(
+    global_nonce: &[Vec<u8>],
+    local_nonce: &[Vec<u8>],
+) -> Result<[u8; TARGET_HASH_SIZE], fvm_shared::error::ErrorNumber> {
+    let global_nonce_raw = to_raw(global_nonce);
+    let local_nonce_raw = to_raw(local_nonce);
+
+    unsafe {
+        sys::run_randomx_batched(
+            global_nonce_raw.as_ptr(),
+            global_nonce_raw.len() as u32,
+            local_nonce_raw.as_ptr(),
+            local_nonce_raw.len() as u32,
+        )
+    }
+}
+
+fn to_raw(array: &[Vec<u8>]) -> Vec<(*const u8, usize)> {
+    array.iter().map(|v| (v.as_ptr(), v.len())).collect::<_>()
 }
