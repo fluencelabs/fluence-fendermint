@@ -39,6 +39,7 @@ use fvm::kernel::SyscallError;
 use fvm::syscalls::Context;
 use fvm_shared::error::ErrorNumber;
 
+pub use fluence_fendermint_shared::BATCHED_SYSCALL_FUNCTION_NAME;
 pub use fluence_fendermint_shared::SYSCALL_FUNCTION_NAME;
 pub use fluence_fendermint_shared::SYSCALL_MODULE_NAME;
 pub use fluence_fendermint_shared::TARGET_HASH_SIZE;
