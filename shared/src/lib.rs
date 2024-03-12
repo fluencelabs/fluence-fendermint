@@ -35,3 +35,7 @@ pub const SYSCALL_MODULE_NAME: &str = "fluence";
 /// Name of the import function (syscall)
 /// which will be used to call the actual syscall implementation.
 pub const SYSCALL_FUNCTION_NAME: &str = "run_randomx";
+
+/// Name of a batched version of import function (syscall)
+/// which will be used to call the actual syscall implementation.
+pub const BATCHED_SYSCALL_FUNCTION_NAME: &str = "run_randomx_batched";
