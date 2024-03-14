@@ -106,17 +106,19 @@ pub fn run_randomx_batched(
     // Pack the Vec<[u8; 32]> into a single [u8; BATCHED_HASHES_BYTE_SIZE]
     let hashes_number = result.len() as u32;
     let mut result = [0; BATCHED_HASHES_BYTE_SIZE];
-    result[..mem::size_of::<u32>()].copy_from_slice(&hashes_number.to_le_bytes());
+    // Length goes into the last 4 bytes as LE u32.
+    result[BATCHED_HASHES_BYTE_SIZE - mem::size_of::<u32>()..]
+        .copy_from_slice(&hashes_number.to_le_bytes());
 
-    let result = result
-        .iter()
-        .enumerate()
-        .fold(result, |mut acc, (idx, hash)| {
-            let hash_as_slice = std::slice::from_ref(hash);
-            let array_idx = (idx + 1) * TARGET_HASH_SIZE;
-            acc[array_idx..array_idx + TARGET_HASH_SIZE].copy_from_slice(hash_as_slice);
-            acc
-        });
+    let result =
+        result
+            .chunks_exact(TARGET_HASH_SIZE)
+            .enumerate()
+            .fold(result, |mut acc, (idx, hash)| {
+                let array_idx = idx * TARGET_HASH_SIZE;
+                acc[array_idx..array_idx + TARGET_HASH_SIZE].copy_from_slice(hash);
+                acc
+            });
 
     Ok(result)
 }
