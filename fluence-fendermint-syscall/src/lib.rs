@@ -26,8 +26,11 @@
     unreachable_patterns
 )]
 
+use fluence_fendermint_shared::BATCHED_HASHES_BYTE_SIZE;
+use fluence_fendermint_shared::HASHES_BATCH_SIZE;
 use num_traits::cast::FromPrimitive;
 use std::fmt::Display;
+use std::mem;
 
 use ccp_randomx::cache::Cache;
 use ccp_randomx::flags::RandomXFlags;
@@ -72,7 +75,7 @@ pub fn run_randomx_batched(
     global_nonces_len: u32,
     local_nonce_addr: u32,
     local_nonces_len: u32,
-) -> Result<Vec<[u8; TARGET_HASH_SIZE]>, ExecutionError> {
+) -> Result<[u8; BATCHED_HASHES_BYTE_SIZE], ExecutionError> {
     use rayon::prelude::*;
 
     if global_nonces_len != local_nonces_len {
@@ -96,6 +99,24 @@ pub fn run_randomx_batched(
             compute_randomx_hash(randomx_flags, global_nonce, local_nonce)
         })
         .collect::<Result<Vec<_>, _>>()?;
+
+    // WIP
+    assert!(result.len() < HASHES_BATCH_SIZE);
+
+    // Pack the Vec<[u8; 32]> into a single [u8; BATCHED_HASHES_BYTE_SIZE]
+    let hashes_number = result.len() as u32;
+    let mut result = [0; BATCHED_HASHES_BYTE_SIZE];
+    result[..mem::size_of::<u32>()].copy_from_slice(&hashes_number.to_le_bytes());
+
+    let result = result
+        .iter()
+        .enumerate()
+        .fold(result, |mut acc, (idx, hash)| {
+            let hash_as_slice = std::slice::from_ref(hash);
+            let array_idx = (idx + 1) * TARGET_HASH_SIZE;
+            acc[array_idx..array_idx + TARGET_HASH_SIZE].copy_from_slice(hash_as_slice);
+            acc
+        });
 
     Ok(result)
 }

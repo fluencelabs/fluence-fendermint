@@ -28,6 +28,7 @@
 
 mod sys;
 
+use fluence_fendermint_shared::BATCHED_HASHES_BYTE_SIZE;
 pub use fluence_fendermint_shared::TARGET_HASH_SIZE;
 
 /// Run RandomX in the light mode with the supplied global (K) and local (H) nonce,
@@ -51,7 +52,7 @@ pub fn run_randomx(
 pub fn run_randomx_batched(
     global_nonce: &[Vec<u8>],
     local_nonce: &[Vec<u8>],
-) -> Result<Vec<[u8; TARGET_HASH_SIZE]>, fvm_shared::error::ErrorNumber> {
+) -> Result<[u8; BATCHED_HASHES_BYTE_SIZE], fvm_shared::error::ErrorNumber> {
     let global_nonce_raw = to_raw(global_nonce);
     let local_nonce_raw = to_raw(local_nonce);
 

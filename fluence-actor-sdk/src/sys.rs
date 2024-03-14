@@ -33,5 +33,5 @@ fvm_syscalls! {
         global_nonce_len: u32,
         local_nonce_addr: *const (*const u8, usize),
         local_nonce_len: u32,
-    ) -> Result<Vec<[u8; crate::TARGET_HASH_SIZE]>>;
+    ) -> Result<[u8; crate::BATCHED_HASHES_BYTE_SIZE]>;
 }
