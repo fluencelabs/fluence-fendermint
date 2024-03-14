@@ -16,5 +16,9 @@ ccp-shared = { workspace = true }
 fvm = { workspace = true }
 fvm_shared = { workspace = true }
 
-rayon = { workspace = true }
+dashmap = { workspace = true }
 num-traits = { workspace = true }
+once_cell = { workspace = true }
+rayon = { workspace = true }
+lru = { workspace = true }
+hex = { workspace = true }

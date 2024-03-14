@@ -17,3 +17,4 @@ fluence-fendermint-shared = { workspace = true }
 fvm_shared = { workspace = true }
 fvm_sdk = { workspace = true }
 num-traits = { workspace = true }
+fvm_ipld_encoding = { workspace = true }
