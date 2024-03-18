@@ -30,6 +30,7 @@ mod sys;
 
 use fluence_fendermint_shared::BATCHED_HASHES_BYTE_SIZE;
 pub use fluence_fendermint_shared::TARGET_HASH_SIZE;
+use fvm_ipld_encoding::BytesDe;
 
 /// Run RandomX in the light mode with the supplied global (K) and local (H) nonce,
 /// return its result hash.
@@ -51,8 +52,8 @@ pub fn run_randomx(
 /// return its result hash.
 /// The serialized global and local nonces vectors are passed to syscall as *const u8.
 pub fn run_randomx_batched(
-    global_nonce: &[Vec<u8>],
-    local_nonce: &[Vec<u8>],
+    global_nonce: &Vec<BytesDe>,
+    local_nonce: &Vec<BytesDe>,
 ) -> Result<[u8; BATCHED_HASHES_BYTE_SIZE], fvm_shared::error::ErrorNumber> {
     let global_nonce_raw = to_raw(global_nonce);
     // The multiplier 8 here means every element is (u32, u32) pair.
@@ -71,11 +72,11 @@ pub fn run_randomx_batched(
     }
 }
 
-fn to_raw(array: &[Vec<u8>]) -> Vec<u32> {
+fn to_raw(array: &Vec<BytesDe>) -> Vec<u32> {
     array.iter().fold(vec![], |mut acc, v| {
         // This presumes we are in WASM with 32-bit pointers using Little Endian.
-        acc.push(v.as_ptr() as u32);
-        acc.push(v.len() as u32);
+        acc.push(v.0.as_ptr() as u32);
+        acc.push(v.0.len() as u32);
         acc
     })
 }

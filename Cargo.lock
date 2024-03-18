@@ -997,6 +997,7 @@ name = "fluence-actor-sdk"
 version = "0.1.2"
 dependencies = [
  "fluence-fendermint-shared",
+ "fvm_ipld_encoding",
  "fvm_sdk",
  "fvm_shared",
  "num-traits",
