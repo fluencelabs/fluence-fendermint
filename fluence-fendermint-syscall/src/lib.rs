@@ -27,10 +27,8 @@
 )]
 
 use fluence_fendermint_shared::BATCHED_HASHES_BYTE_SIZE;
-use fluence_fendermint_shared::HASHES_BATCH_SIZE;
 use num_traits::cast::FromPrimitive;
 use std::fmt::Display;
-use std::mem;
 
 use ccp_randomx::cache::Cache;
 use ccp_randomx::flags::RandomXFlags;
@@ -47,6 +45,7 @@ pub use fluence_fendermint_shared::SYSCALL_FUNCTION_NAME;
 pub use fluence_fendermint_shared::SYSCALL_MODULE_NAME;
 pub use fluence_fendermint_shared::TARGET_HASH_SIZE;
 
+const ERRORS_BASE: u32 = 0x10000000;
 const RANDOMX_SYSCALL_ERROR_CODE: u32 = 0x10000001;
 const INVALID_LENGTH_ERROR_CODE: u32 = 0x10000002;
 const ARGUMENTS_HAVE_DIFFERENT_LENGTH_ERROR_CODE: u32 = 0x10000002;
@@ -92,7 +91,7 @@ pub fn run_randomx_batched(
 
     let randomx_flags = RandomXFlags::recommended();
 
-    let result = global_nonces
+    let hashes = global_nonces
         .par_iter()
         .zip(local_nonces.par_iter())
         .map(|(local_nonce, global_nonce)| {
@@ -100,25 +99,17 @@ pub fn run_randomx_batched(
         })
         .collect::<Result<Vec<_>, _>>()?;
 
-    // WIP
-    assert!(result.len() < HASHES_BATCH_SIZE);
-
     // Pack the Vec<[u8; 32]> into a single [u8; BATCHED_HASHES_BYTE_SIZE]
-    let hashes_number = result.len() as u32;
-    let mut result = [0; BATCHED_HASHES_BYTE_SIZE];
-    // Length goes into the last 4 bytes as LE u32.
-    result[BATCHED_HASHES_BYTE_SIZE - mem::size_of::<u32>()..]
-        .copy_from_slice(&hashes_number.to_le_bytes());
+    let result = [0u8; BATCHED_HASHES_BYTE_SIZE];
 
-    let result =
-        result
-            .chunks_exact(TARGET_HASH_SIZE)
-            .enumerate()
-            .fold(result, |mut acc, (idx, hash)| {
-                let array_idx = idx * TARGET_HASH_SIZE;
-                acc[array_idx..array_idx + TARGET_HASH_SIZE].copy_from_slice(hash);
-                acc
-            });
+    let result = hashes
+        .iter()
+        .enumerate()
+        .fold(result, |mut acc, (idx, hash)| {
+            let array_idx = idx * TARGET_HASH_SIZE;
+            acc[array_idx..array_idx + TARGET_HASH_SIZE].copy_from_slice(hash);
+            acc
+        });
 
     Ok(result)
 }
@@ -171,7 +162,7 @@ fn from_raw(
 }
 
 fn execution_error(error_code: u32, message: impl Display) -> ExecutionError {
-    let error_number = ErrorNumber::from_u32(error_code).unwrap();
+    let error_number = ErrorNumber::from_u32(error_code - ERRORS_BASE).unwrap();
     let syscall_error = SyscallError::new(error_number, message);
     ExecutionError::Syscall(syscall_error)
 }
