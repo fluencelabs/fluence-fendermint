@@ -70,13 +70,16 @@ pub fn run_randomx(
 
 pub fn run_randomx_batched(
     context: Context<'_, impl Kernel>,
+    // Pointer to vector of global nonces represented as Vec<Vec<u8>>.
     global_nonce_addr: u32,
     global_nonces_len: u32,
+    // Pointer to vector of local nonces represented as Vec<Vec<u8>>.
     local_nonce_addr: u32,
     local_nonces_len: u32,
 ) -> Result<[u8; BATCHED_HASHES_BYTE_SIZE], ExecutionError> {
     use rayon::prelude::*;
 
+    // Byte length of arrays must be equal.
     if global_nonces_len != local_nonces_len {
         return Err(execution_error(
             ARGUMENTS_HAVE_DIFFERENT_LENGTH_ERROR_CODE,
@@ -134,6 +137,7 @@ fn from_raw(
 ) -> Result<Vec<Vec<u8>>, ExecutionError> {
     use fvm::kernel::ClassifyResult;
 
+    // This invariant means that every 4 + 4 bytes represent *const u32 + its length.
     if len % 8 != 0 {
         return Err(execution_error(
             INVALID_LENGTH_ERROR_CODE,
@@ -151,6 +155,7 @@ fn from_raw(
     let mut result = Vec::new();
     for pair_id in 0..len / 8 {
         let id = (pair_id * 8) as usize;
+        // This presumes we are in WASM with 32-bit pointers using Little Endian.
         let addr = u32::from_le_bytes(raw_result[id..(id + 4)].try_into().unwrap());
         let length = u32::from_le_bytes(raw_result[id + 4..id + 8].try_into().unwrap());
 
