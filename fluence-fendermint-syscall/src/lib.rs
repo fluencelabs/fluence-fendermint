@@ -174,7 +174,11 @@ fn from_raw(
         let length = u32::from_le_bytes(raw_result[id + 4..id + 8].try_into().unwrap());
         println!("sys from_raw loop: a {:x} l {}", addr, length);
 
-        let result_ = unsafe { Vec::from_raw_parts(addr as _, length as usize, length as usize) };
+        let wasm_buf = context.memory.try_slice(addr, length)?;
+
+        let result_ = unsafe {
+            Vec::from_raw_parts(wasm_buf.as_ptr() as _, length as usize, length as usize)
+        };
         result.push(result_)
     }
 
