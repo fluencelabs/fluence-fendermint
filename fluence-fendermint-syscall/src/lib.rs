@@ -89,8 +89,13 @@ pub fn run_randomx_batched(
         ));
     }
 
-    let global_nonces = from_raw(&context, global_nonce_addr, global_nonces_len)?;
-    let local_nonces = from_raw(&context, local_nonce_addr, local_nonces_len)?;
+    println!(
+        "sys glob: gl {:x} g_l {} loc {:x} l_l {}",
+        global_nonce_addr, global_nonces_len, local_nonce_addr, local_nonces_len
+    );
+
+    let global_nonces = from_raw(&context, global_nonce_addr, global_nonces_len, true)?;
+    let local_nonces = from_raw(&context, local_nonce_addr, local_nonces_len, false)?;
 
     let randomx_flags = RandomXFlags::recommended();
 
@@ -138,6 +143,7 @@ fn from_raw(
     context: &Context<'_, impl Kernel>,
     offset: u32,
     len: u32,
+    a: bool,
 ) -> Result<Vec<Vec<u8>>, ExecutionError> {
     use fvm::kernel::ClassifyResult;
 
@@ -148,7 +154,11 @@ fn from_raw(
             format!("array length is {}, it's not dividable by 8", len),
         ));
     }
-
+    if a {
+        println!("sys from_raw: g a {:x} l {}", offset, len);
+    } else {
+        println!("sys from_raw: g a {:x} l {}", offset, len);
+    }
     let raw_result = context
         .memory
         .get(offset as usize..)
@@ -162,6 +172,7 @@ fn from_raw(
         // This presumes we are in WASM with 32-bit pointers using Little Endian.
         let addr = u32::from_le_bytes(raw_result[id..(id + 4)].try_into().unwrap());
         let length = u32::from_le_bytes(raw_result[id + 4..id + 8].try_into().unwrap());
+        println!("sys from_raw loop: a {:x} l {}", addr, length);
 
         let result_ = unsafe { Vec::from_raw_parts(addr as _, length as usize, length as usize) };
         result.push(result_)
