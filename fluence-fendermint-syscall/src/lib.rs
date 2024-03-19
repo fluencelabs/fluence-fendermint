@@ -98,7 +98,11 @@ pub fn run_randomx_batched(
         .par_iter()
         .zip(local_nonces.par_iter())
         .map(|(local_nonce, global_nonce)| {
-            compute_randomx_hash(randomx_flags, global_nonce, local_nonce)
+            compute_randomx_hash(
+                randomx_flags,
+                global_nonce.as_slice(),
+                local_nonce.as_slice(),
+            )
         })
         .collect::<Result<Vec<_>, _>>()?;
 

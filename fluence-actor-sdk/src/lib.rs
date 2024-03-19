@@ -60,13 +60,13 @@ pub fn run_randomx_batched(
     let global_nonce_raw_byte_len = (global_nonce.len() * 8) as u32;
     let local_nonce_raw = to_raw(local_nonce);
     // The multiplier 8 here means every element is (u32, u32) pair.
-    let local_nonce_raw_byte_len = (global_nonce.len() * 8) as u32;
+    let local_nonce_raw_byte_len = (local_nonce.len() * 8) as u32;
 
     unsafe {
         sys::run_randomx_batched(
-            global_nonce_raw.as_ptr(),
+            global_nonce_raw.as_slice().as_ptr(),
             global_nonce_raw_byte_len,
-            local_nonce_raw.as_ptr(),
+            local_nonce_raw.as_slice().as_ptr(),
             local_nonce_raw_byte_len,
         )
     }
@@ -75,7 +75,7 @@ pub fn run_randomx_batched(
 fn to_raw(array: &Vec<BytesDe>) -> Vec<u32> {
     array.iter().fold(vec![], |mut acc, v| {
         // This presumes we are in WASM with 32-bit pointers using Little Endian.
-        acc.push(v.0.as_ptr() as u32);
+        acc.push(v.0.as_slice().as_ptr() as u32);
         acc.push(v.0.len() as u32);
         acc
     })
