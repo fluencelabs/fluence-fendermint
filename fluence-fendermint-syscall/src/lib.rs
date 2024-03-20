@@ -98,6 +98,15 @@ pub fn run_randomx_batched(
         .par_iter()
         .zip(local_nonces.par_iter())
         .map(|(local_nonce, global_nonce)| {
+            let g: String = global_nonce
+                .iter()
+                .map(|b| format!("{:02x}", b))
+                .collect::<String>();
+            let l: String = local_nonce
+                .iter()
+                .map(|b| format!("{:02x}", b))
+                .collect::<String>();
+            println!("sys rx: g 0x{} l 0x{}", g, l);
             compute_randomx_hash(randomx_flags, global_nonce, local_nonce)
         })
         .collect::<Result<Vec<_>, _>>()?;
