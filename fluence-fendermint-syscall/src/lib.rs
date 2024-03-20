@@ -103,14 +103,11 @@ pub fn run_randomx_batched(
         .par_iter()
         .zip(local_nonces.par_iter())
         .map(|(local_nonce, global_nonce)| {
-            compute_randomx_hash(
-                randomx_flags,
-                global_nonce.as_slice(),
-                local_nonce.as_slice(),
-            )
+            compute_randomx_hash(randomx_flags, global_nonce, local_nonce)
         })
         .collect::<Result<Vec<_>, _>>()?;
 
+    println!("sys glob: finish with compute");
     // Pack the Vec<[u8; 32]> into a single [u8; BATCHED_HASHES_BYTE_SIZE]
     let result = [0u8; BATCHED_HASHES_BYTE_SIZE];
 
@@ -139,12 +136,12 @@ fn compute_randomx_hash(
     Ok(vm.hash(local_nonce).into_slice())
 }
 
-fn from_raw(
-    context: &Context<'_, impl Kernel>,
+fn from_raw<'context>(
+    context: &'context Context<'_, impl Kernel>,
     offset: u32,
     len: u32,
     a: bool,
-) -> Result<Vec<Vec<u8>>, ExecutionError> {
+) -> Result<Vec<&'context [u8]>, ExecutionError> {
     use fvm::kernel::ClassifyResult;
 
     // This invariant means that every 4 + 4 bytes represent *const u32 + its length.
@@ -174,12 +171,8 @@ fn from_raw(
         let length = u32::from_le_bytes(raw_result[id + 4..id + 8].try_into().unwrap());
         println!("sys from_raw loop: a {:x} l {}", addr, length);
 
-        let wasm_buf = context.memory.try_slice(addr, length)?;
-
-        let result_ = unsafe {
-            Vec::from_raw_parts(wasm_buf.as_ptr() as _, length as usize, length as usize)
-        };
-        result.push(result_)
+        let nonce_buf_from_wasm = context.memory.try_slice(addr, length)?;
+        result.push(nonce_buf_from_wasm)
     }
 
     Ok(result)
