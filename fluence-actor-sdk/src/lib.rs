@@ -55,19 +55,15 @@ pub fn run_randomx_batched(
     global_nonce: &Vec<BytesDe>,
     local_nonce: &Vec<BytesDe>,
 ) -> Result<[u8; BATCHED_HASHES_BYTE_SIZE], fvm_shared::error::ErrorNumber> {
-    let global_nonce_raw = to_raw(global_nonce, true);
+    let global_nonce_raw = to_raw(global_nonce);
+    let global_ptr = global_nonce_raw.as_slice().as_ptr();
     // The multiplier 8 here means every element is (u32, u32) pair.
     let global_nonce_raw_byte_len = (global_nonce.len() * 8) as u32;
-    let local_nonce_raw = to_raw(local_nonce, false);
+    let local_nonce_raw = to_raw(local_nonce);
+    let local_ptr = local_nonce_raw.as_slice().as_ptr();
+
     // The multiplier 8 here means every element is (u32, u32) pair.
     let local_nonce_raw_byte_len = (local_nonce.len() * 8) as u32;
-
-    let global_ptr = global_nonce_raw.as_slice().as_ptr();
-    let local_ptr = local_nonce_raw.as_slice().as_ptr();
-    println!(
-        "sdk: glob {:x} g_l {} loc {:x} l_l {}",
-        global_ptr as u32, global_nonce_raw_byte_len, local_ptr as u32, local_nonce_raw_byte_len
-    );
 
     unsafe {
         sys::run_randomx_batched(
@@ -79,23 +75,9 @@ pub fn run_randomx_batched(
     }
 }
 
-fn to_raw(array: &Vec<BytesDe>, a: bool) -> Vec<u32> {
+fn to_raw(array: &Vec<BytesDe>) -> Vec<u32> {
     array.iter().fold(vec![], |mut acc, v| {
         // This presumes we are in WASM with 32-bit pointers using Little Endian.
-        if a {
-            println!(
-                "sdk to_raw: g ptr {:x} l {}",
-                v.0.as_slice().as_ptr() as u32,
-                v.0.len() as u32,
-            );
-        } else {
-            println!(
-                "sdk to_raw: l ptr {:x} l {}",
-                v.0.as_slice().as_ptr() as u32,
-                v.0.len() as u32,
-            );
-        }
-
         acc.push(v.0.as_slice().as_ptr() as u32);
         acc.push(v.0.len() as u32);
         acc
