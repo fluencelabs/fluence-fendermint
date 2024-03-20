@@ -123,7 +123,7 @@ pub fn run_randomx_batched(
             acc
         });
 
-    let r: String = result
+    let r: String = result[0..TARGET_HASH_SIZE]
         .iter()
         .map(|b| format!("{:02x}", b))
         .collect::<String>();
