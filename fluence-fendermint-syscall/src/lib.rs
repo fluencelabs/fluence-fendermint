@@ -97,7 +97,7 @@ pub fn run_randomx_batched(
     let hashes = global_nonces
         .par_iter()
         .zip(local_nonces.par_iter())
-        .map(|(local_nonce, global_nonce)| {
+        .map(|(global_nonce, local_nonce)| {
             let g: String = global_nonce
                 .iter()
                 .map(|b| format!("{:02x}", b))
