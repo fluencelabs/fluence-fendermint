@@ -98,15 +98,6 @@ pub fn run_randomx_batched(
         .par_iter()
         .zip(local_nonces.par_iter())
         .map(|(global_nonce, local_nonce)| {
-            let g: String = global_nonce
-                .iter()
-                .map(|b| format!("{:02x}", b))
-                .collect::<String>();
-            let l: String = local_nonce
-                .iter()
-                .map(|b| format!("{:02x}", b))
-                .collect::<String>();
-            println!("sys rx: g 0x{} l 0x{}", g, l);
             compute_randomx_hash(randomx_flags, global_nonce, local_nonce)
         })
         .collect::<Result<Vec<_>, _>>()?;
@@ -122,12 +113,6 @@ pub fn run_randomx_batched(
             acc[array_idx..array_idx + TARGET_HASH_SIZE].copy_from_slice(hash);
             acc
         });
-
-    let r: String = result[0..TARGET_HASH_SIZE]
-        .iter()
-        .map(|b| format!("{:02x}", b))
-        .collect::<String>();
-    println!("sys res: 0x{}", r);
 
     Ok(result)
 }
@@ -152,13 +137,17 @@ fn from_raw<'context>(
 ) -> Result<Vec<&'context [u8]>, ExecutionError> {
     use fvm::kernel::ClassifyResult;
 
-    // This invariant means that every 4 + 4 bytes represent *const u32 + its length.
+    // Here we process (u32, u32) pairs array created by SDK part in WASM.
+    // The first u32 is a pointer to nonce buffer, the second u32 is a length of nonce buffer.
+    // This invariant means that every (u32,u32) pair uses 4 + 4 bytes.
     if len % 8 != 0 {
         return Err(execution_error(
             INVALID_LENGTH_ERROR_CODE,
             format!("array length is {}, it's not dividable by 8", len),
         ));
     }
+
+    // Get the outter array data from the memory allocated in wasm runtime.
     let raw_result = context
         .memory
         .get(offset as usize..)
@@ -167,12 +156,14 @@ fn from_raw<'context>(
         .or_error(ErrorNumber::IllegalArgument)?;
 
     let mut result = Vec::new();
+    // Process the array of (u32, u32) pairs.
     for pair_id in 0..len / 8 {
         let id = (pair_id * 8) as usize;
         // This presumes we are in WASM with 32-bit pointers using Little Endian.
         let addr = u32::from_le_bytes(raw_result[id..(id + 4)].try_into().unwrap());
         let length = u32::from_le_bytes(raw_result[id + 4..id + 8].try_into().unwrap());
 
+        // Get Nonce buffer from the memory allocated in wasm runtime.
         let nonce_buf_from_wasm = context.memory.try_slice(addr, length)?;
         result.push(nonce_buf_from_wasm)
     }

@@ -61,7 +61,6 @@ pub fn run_randomx_batched(
     let global_nonce_raw_byte_len = (global_nonce.len() * 8) as u32;
     let local_nonce_raw = to_raw(local_nonce);
     let local_ptr = local_nonce_raw.as_slice().as_ptr();
-
     // The multiplier 8 here means every element is (u32, u32) pair.
     let local_nonce_raw_byte_len = (local_nonce.len() * 8) as u32;
 
