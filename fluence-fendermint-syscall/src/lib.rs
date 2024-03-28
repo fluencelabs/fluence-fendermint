@@ -78,6 +78,9 @@ pub fn run_randomx_batched(
     local_nonces_len: u32,
 ) -> Result<[u8; BATCHED_HASHES_BYTE_SIZE], ExecutionError> {
     use rayon::prelude::*;
+    use std::time::Instant;
+
+    let start = Instant::now();
 
     // Byte length of arrays must be equal.
     if global_nonces_len != local_nonces_len {
@@ -94,6 +97,9 @@ pub fn run_randomx_batched(
 
     let randomx_flags = RandomXFlags::recommended();
 
+    let duration = start.elapsed();
+    println!("run_randomx_batched: from_raw took {:?}", duration);
+
     let hashes = global_nonces
         .par_iter()
         .zip(local_nonces.par_iter())
@@ -101,6 +107,9 @@ pub fn run_randomx_batched(
             compute_randomx_hash(randomx_flags, global_nonce, local_nonce)
         })
         .collect::<Result<Vec<_>, _>>()?;
+
+    let duration = start.elapsed();
+    println!("run_randomx_batched: randomx took {:?}", duration);
 
     // Pack the Vec<[u8; 32]> into a single [u8; BATCHED_HASHES_BYTE_SIZE]
     let result = [0u8; BATCHED_HASHES_BYTE_SIZE];
@@ -113,6 +122,9 @@ pub fn run_randomx_batched(
             acc[array_idx..array_idx + TARGET_HASH_SIZE].copy_from_slice(hash);
             acc
         });
+
+    let duration = start.elapsed();
+    println!("run_randomx_batched: pack took {:?}", duration);
 
     Ok(result)
 }
