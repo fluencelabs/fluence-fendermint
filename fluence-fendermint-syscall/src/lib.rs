@@ -78,6 +78,7 @@ pub fn run_randomx_batched(
     local_nonces_len: u32,
 ) -> Result<[u8; BATCHED_HASHES_BYTE_SIZE], ExecutionError> {
     use rayon::prelude::*;
+    use rayon::ThreadPoolBuilder;
     use std::time::Instant;
 
     let start = Instant::now();
@@ -100,13 +101,22 @@ pub fn run_randomx_batched(
     let duration = start.elapsed();
     println!("run_randomx_batched: from_raw took {:?}", duration);
 
-    let hashes = global_nonces
-        .par_iter()
-        .zip(local_nonces.par_iter())
-        .map(|(global_nonce, local_nonce)| {
-            compute_randomx_hash(randomx_flags, global_nonce, local_nonce)
-        })
-        .collect::<Result<Vec<_>, _>>()?;
+    let pool = ThreadPoolBuilder::new().num_threads(8).build().unwrap();
+    println!(
+        "run_randomx_batched pool threads: {}",
+        pool.current_num_threads()
+    );
+
+    // let mut hashes: Vec<[u8; TARGET_HASH_SIZE]> = Vec::with_capacity(global_nonces.len());
+    let hashes = pool.install(|| -> Result<Vec<[u8; TARGET_HASH_SIZE]>, ExecutionError> {
+        global_nonces
+            .par_iter()
+            .zip(local_nonces.par_iter())
+            .map(|(global_nonce, local_nonce)| {
+                compute_randomx_hash(randomx_flags, global_nonce, local_nonce)
+            })
+            .collect::<Result<Vec<_>, _>>()
+    })?;
 
     let duration = start.elapsed();
     println!("run_randomx_batched: randomx took {:?}", duration);
