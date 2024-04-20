@@ -26,9 +26,12 @@
     unreachable_patterns
 )]
 
+use ccp_randomx::cache::CacheHandle;
+use dashmap::DashMap;
 use fluence_fendermint_shared::BATCHED_HASHES_BYTE_SIZE;
 use num_traits::cast::FromPrimitive;
 use std::fmt::Display;
+use std::time::Instant;
 
 use ccp_randomx::cache::Cache;
 use ccp_randomx::flags::RandomXFlags;
@@ -77,10 +80,6 @@ pub fn run_randomx_batched(
     local_nonce_addr: u32,
     local_nonces_len: u32,
 ) -> Result<[u8; BATCHED_HASHES_BYTE_SIZE], ExecutionError> {
-    use rayon::prelude::*;
-    use rayon::ThreadPoolBuilder;
-    use std::time::Instant;
-
     let start = Instant::now();
 
     // Byte length of arrays must be equal.
@@ -96,30 +95,12 @@ pub fn run_randomx_batched(
     let global_nonces = from_raw(&context, global_nonce_addr, global_nonces_len)?;
     let local_nonces = from_raw(&context, local_nonce_addr, local_nonces_len)?;
 
-    let randomx_flags = RandomXFlags::recommended();
-
     let duration = start.elapsed();
     println!("run_randomx_batched: from_raw took {:?}", duration);
 
-    let pool = ThreadPoolBuilder::new().num_threads(8).build().unwrap();
-    println!(
-        "run_randomx_batched pool threads: {}",
-        pool.current_num_threads()
-    );
+    let hashes = compute_randomx_hashes(global_nonces, local_nonces)?;
 
-    // let mut hashes: Vec<[u8; TARGET_HASH_SIZE]> = Vec::with_capacity(global_nonces.len());
-    let hashes = pool.install(|| -> Result<Vec<[u8; TARGET_HASH_SIZE]>, ExecutionError> {
-        global_nonces
-            .par_iter()
-            .zip(local_nonces.par_iter())
-            .map(|(global_nonce, local_nonce)| {
-                compute_randomx_hash(randomx_flags, global_nonce, local_nonce)
-            })
-            .collect::<Result<Vec<_>, _>>()
-    })?;
-
-    let duration = start.elapsed();
-    println!("run_randomx_batched: randomx took {:?}", duration);
+    let start = Instant::now();
 
     // Pack the Vec<[u8; 32]> into a single [u8; BATCHED_HASHES_BYTE_SIZE]
     let result = [0u8; BATCHED_HASHES_BYTE_SIZE];
@@ -133,10 +114,87 @@ pub fn run_randomx_batched(
             acc
         });
 
-    let duration = start.elapsed();
-    println!("run_randomx_batched: pack took {:?}", duration);
+    let duration_pack = start.elapsed();
+    println!("run_randomx_batched: pack took {:?}", duration_pack);
 
     Ok(result)
+}
+
+fn compute_randomx_hashes(
+    global_nonces: Vec<&[u8]>,
+    local_nonces: Vec<&[u8]>,
+) -> Result<Vec<[u8; 32]>, ExecutionError> {
+    use rayon::prelude::*;
+    use rayon::ThreadPoolBuilder;
+    use std::collections::HashSet;
+
+    let start = Instant::now();
+    let randomx_flags = RandomXFlags::recommended();
+    let pool = ThreadPoolBuilder::new().num_threads(8).build().unwrap();
+    println!(
+        "run_randomx_batched pool threads: {}",
+        pool.current_num_threads()
+    );
+
+    let mut unique_nonces = HashSet::new();
+    for &n in global_nonces.iter() {
+        let c = unique_nonces.get(n);
+        if c.is_none() {
+            unique_nonces.insert(n);
+        }
+    }
+    let duration_g_nonces = start.elapsed();
+    println!(
+        "run_randomx_batched: find unique global nonces took {:?}",
+        duration_g_nonces
+    );
+
+    let v = unique_nonces.iter().map(|&c| c).collect::<Vec<_>>();
+    let unique_caches = DashMap::new();
+    v.par_iter().for_each(|&k| {
+        let duration_before_cr = start.elapsed();
+
+        let cache = Cache::new(&k, randomx_flags).unwrap();
+        let duration_after_cr = start.elapsed();
+        println!(
+            "run_randomx_batched: Cache::new() {:?}",
+            duration_after_cr - duration_before_cr
+        );
+
+        unique_caches.insert(k, cache);
+        let duration_after_insert = start.elapsed();
+        println!(
+            "run_randomx_batched: DashMap::insert {:?}",
+            duration_after_insert - duration_after_cr
+        );
+    });
+    let duration_cr_caches = start.elapsed();
+    println!(
+        "run_randomx_batched: create unique caches took {:?}",
+        duration_cr_caches - duration_g_nonces
+    );
+
+    let hashes = global_nonces
+        .par_iter()
+        .zip(local_nonces.par_iter())
+        .map(|(global_nonce, local_nonce)| {
+            compute_randomx_hash_with_cache(
+                randomx_flags,
+                unique_caches
+                    .get(global_nonce)
+                    .map(|cache| cache.handle())
+                    .unwrap(),
+                local_nonce,
+            )
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let duration_randomx = start.elapsed();
+    println!(
+        "run_randomx_batched: randomx took {:?}",
+        duration_randomx - duration_cr_caches
+    );
+
+    Ok(hashes)
 }
 
 fn compute_randomx_hash(
@@ -146,6 +204,17 @@ fn compute_randomx_hash(
 ) -> Result<[u8; TARGET_HASH_SIZE], ExecutionError> {
     let cache = Cache::new(global_nonce, randomx_flags)
         .map_err(|e| execution_error(RANDOMX_SYSCALL_ERROR_CODE, e))?;
+    let vm = RandomXVM::light(cache, randomx_flags)
+        .map_err(|e| execution_error(RANDOMX_SYSCALL_ERROR_CODE, e))?;
+
+    Ok(vm.hash(local_nonce).into_slice())
+}
+
+fn compute_randomx_hash_with_cache(
+    randomx_flags: RandomXFlags,
+    cache: CacheHandle,
+    local_nonce: &[u8],
+) -> Result<[u8; TARGET_HASH_SIZE], ExecutionError> {
     let vm = RandomXVM::light(cache, randomx_flags)
         .map_err(|e| execution_error(RANDOMX_SYSCALL_ERROR_CODE, e))?;
 
@@ -197,4 +266,43 @@ fn execution_error(error_code: u32, message: impl Display) -> ExecutionError {
     let error_number = ErrorNumber::from_u32(error_code - ERRORS_BASE).unwrap();
     let syscall_error = SyscallError::new(error_number, message);
     ExecutionError::Syscall(syscall_error)
+}
+
+#[cfg(test)]
+mod tests {
+    use ccp_shared::types::{GlobalNonce, LocalNonce};
+
+    use crate::compute_randomx_hashes;
+
+    #[test]
+    fn compute_randomx_hashes_simple() {
+        let hex_array: [u8; 32] = [
+            0x7a, 0x55, 0xef, 0x51, 0x4e, 0x78, 0x14, 0x7c, 0xed, 0x93, 0x28, 0x21, 0x0a, 0x5a,
+            0x83, 0x25, 0x2c, 0xaf, 0xa8, 0x96, 0x1e, 0xa1, 0x42, 0x99, 0x4b, 0xe7, 0xbb, 0x85,
+            0x18, 0xf6, 0x11, 0x32,
+        ];
+        let local_nonce = LocalNonce::new(hex_array);
+
+        let global_nonces = (0..4)
+            .into_iter()
+            .map(|i| {
+                let mut hex_array: [u8; 32] = [
+                    0x06, 0x48, 0xfb, 0x77, 0x5e, 0x2c, 0x0a, 0xcd, 0xe0, 0xa6, 0x67, 0x09, 0x32,
+                    0x89, 0x1c, 0xc5, 0x92, 0x3a, 0x86, 0xba, 0x00, 0x66, 0x25, 0x21, 0x0b, 0x1f,
+                    0xc7, 0xc9, 0x1a, 0x04, 0x47, 0x4c,
+                ];
+                hex_array[0] += i;
+                GlobalNonce::new(hex_array)
+            })
+            .collect::<Vec<_>>();
+
+        for _ in 0..5 {
+            let global_nonces = global_nonces
+                .iter()
+                .map(|g_n| g_n.as_ref() as &[u8])
+                .collect::<Vec<_>>();
+            let _ = compute_randomx_hashes(global_nonces, vec![local_nonce.as_ref()]);
+            println!();
+        }
+    }
 }
