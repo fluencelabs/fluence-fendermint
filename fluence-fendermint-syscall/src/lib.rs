@@ -260,6 +260,9 @@ fn get_filtered_nonces_and_cached_results<'global, 'local>(
                     let cache_result = cache_hash_lru.get(&(global_as_vec, local_as_vec));
                     match cache_result {
                         Some(result) => {
+                            println!(
+                                "get_filtered_nonces_and_cached_results: RandomX hash cache hit."
+                            );
                             global_and_local_nonces.push(None);
                             cache_results.push(Some(result.to_owned()));
                         }
