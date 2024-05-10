@@ -52,8 +52,8 @@ pub fn run_randomx(
 /// return its result hash.
 /// The serialized global and local nonces vectors are passed to syscall as *const u8.
 pub fn run_randomx_batched(
-    global_nonce: &Vec<BytesDe>,
-    local_nonce: &Vec<BytesDe>,
+    global_nonce: &[BytesDe],
+    local_nonce: &[BytesDe],
 ) -> Result<[u8; BATCHED_HASHES_BYTE_SIZE], fvm_shared::error::ErrorNumber> {
     let global_nonce_raw = to_raw(global_nonce);
     let global_ptr = global_nonce_raw.as_slice().as_ptr();
@@ -74,7 +74,7 @@ pub fn run_randomx_batched(
     }
 }
 
-fn to_raw(array: &Vec<BytesDe>) -> Vec<u32> {
+fn to_raw(array: &[BytesDe]) -> Vec<u32> {
     array.iter().fold(vec![], |mut acc, v| {
         // This presumes we are in WASM with 32-bit pointers using Little Endian.
         acc.push(v.0.as_slice().as_ptr() as u32);
