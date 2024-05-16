@@ -21,3 +21,4 @@ num-traits = { workspace = true }
 once_cell = { workspace = true }
 rayon = { workspace = true }
 lru = { workspace = true }
+hex = { workspace = true }

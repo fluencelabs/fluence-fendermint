@@ -59,7 +59,8 @@ const INVALID_LENGTH_ERROR_CODE: u32 = 0x10000002;
 const ARGUMENTS_HAVE_DIFFERENT_LENGTH_ERROR_CODE: u32 = 0x10000002;
 const RANDOMX_HASH_LRU_CACHE_SIZE: usize = 1024;
 
-type RandomXHashLruMutex = Mutex<LruCache<(Vec<u8>, Vec<u8>), [u8; 32]>>;
+type RandomXHash = [u8; 32];
+type RandomXHashLruMutex = Mutex<LruCache<(Vec<u8>, Vec<u8>), RandomXHash>>;
 type RandomXHashLru = OnceLock<RandomXHashLruMutex>;
 
 // (global, local) -> RandomX hash LRU cache.
@@ -114,7 +115,7 @@ pub fn run_randomx_batched(
 
     let start = Instant::now();
 
-    // Pack the Vec<[u8; 32]> into a single [u8; BATCHED_HASHES_BYTE_SIZE]
+    // Pack the Vec<RandomXHash> into a single [u8; BATCHED_HASHES_BYTE_SIZE]
     let result = [0u8; BATCHED_HASHES_BYTE_SIZE];
 
     let result = hashes
@@ -135,7 +136,7 @@ pub fn run_randomx_batched(
 fn compute_randomx_hashes(
     global_nonces: Vec<&[u8]>,
     local_nonces: Vec<&[u8]>,
-) -> Result<Vec<[u8; 32]>, ExecutionError> {
+) -> Result<Vec<RandomXHash>, ExecutionError> {
     let start = Instant::now();
     let randomx_flags = RandomXFlags::recommended();
 
@@ -158,7 +159,7 @@ fn compute_randomx_hashes(
         duration_cr_caches - duration_g_nonces
     );
 
-    let hashes = compute_randomx_hashes_loop(
+    let hashes = compute_or_use_cached_randomx_hashes(
         &global_and_local_nonces,
         &cache_results,
         randomx_flags,
@@ -176,12 +177,12 @@ fn compute_randomx_hashes(
     Ok(hashes)
 }
 
-fn compute_randomx_hashes_loop<'nonces>(
+fn compute_or_use_cached_randomx_hashes<'nonces>(
     global_and_local_nonces: &Vec<Option<(&'nonces [u8], &'nonces [u8])>>,
-    cache_results: &Vec<Option<[u8; 32]>>,
+    cache_results: &Vec<Option<RandomXHash>>,
     randomx_flags: RandomXFlags,
     unique_caches: &DashMap<&'nonces [u8], Cache>,
-) -> Result<Vec<[u8; 32]>, ExecutionError> {
+) -> Result<Vec<RandomXHash>, ExecutionError> {
     use rayon::prelude::*;
 
     let hashes = global_and_local_nonces
@@ -208,7 +209,6 @@ fn compute_randomx_hashes_loop<'nonces>(
 fn get_unique_randomx_caches(
     unique_global_nonces: &HashSet<Vec<u8>>,
     randomx_flags: RandomXFlags,
-    // unique_caches: &'global mut DashMap<&'global [u8], Cache>,
 ) -> DashMap<&[u8], Cache> {
     use rayon::prelude::*;
 
@@ -239,50 +239,57 @@ fn get_filtered_nonces_and_cached_results<'global, 'local>(
     local_nonces: &[&'local [u8]],
 ) -> (
     Vec<Option<(&'global [u8], &'local [u8])>>,
-    Vec<Option<[u8; 32]>>,
+    Vec<Option<RandomXHash>>,
 ) {
-    let (global_and_local_nonces, cache_results) =
+    let (global_and_local_nonces, cache_results) = unsafe {
+        let cache_hash_mutex: &RandomXHashLruMutex = RANDOMX_HASH_LRU_CACHE.get_or_init(|| {
+            let lru_max_size = NonZeroUsize::new(RANDOMX_HASH_LRU_CACHE_SIZE)
+                .expect("LRU max size must be non-zero");
+            Mutex::new(LruCache::new(lru_max_size))
+        });
+
+        let mut cache_hash_lru = cache_hash_mutex.lock().unwrap();
         global_nonces.iter().zip(local_nonces.iter()).fold(
             (vec![], vec![]),
             |(mut global_and_local_nonces, mut cache_results), (&global, &local)| {
-                let global_as_vec = global.into();
-                let local_as_vec = local.into();
+                // TODO remove explicit types after the measurements are done
+                let global_as_vec: Vec<u8> = global.into();
+                let local_as_vec: Vec<u8> = local.into();
 
-                unsafe {
-                    let cache_hash_mutex: &RandomXHashLruMutex = RANDOMX_HASH_LRU_CACHE
-                        .get_or_init(|| {
-                            let lru_max_size = NonZeroUsize::new(RANDOMX_HASH_LRU_CACHE_SIZE)
-                                .expect("LRU max size must be non-zero");
-                            Mutex::new(LruCache::new(lru_max_size))
-                        });
+                // TODO remove after the measurements are done
+                let global_as_hex_string = hex::encode(global_as_vec.clone());
+                let local_as_hex_string = hex::encode(local_as_vec.clone());
 
-                    let mut cache_hash_lru = cache_hash_mutex.lock().unwrap();
-                    let cache_result = cache_hash_lru.get(&(global_as_vec, local_as_vec));
-                    match cache_result {
-                        Some(result) => {
-                            println!(
-                                "get_filtered_nonces_and_cached_results: RandomX hash cache hit."
-                            );
-                            global_and_local_nonces.push(None);
-                            cache_results.push(Some(result.to_owned()));
-                        }
-                        None => {
-                            global_and_local_nonces.push(Some((global, local)));
-                            cache_results.push(None);
-                        }
+                let cache_result = cache_hash_lru.get(&(global_as_vec, local_as_vec));
+                match cache_result {
+                    Some(result) => {
+                        println!(
+                            "Cache hit g: {} l: {}",
+                            global_as_hex_string, local_as_hex_string
+                        );
+                        global_and_local_nonces.push(None);
+                        cache_results.push(Some(result.to_owned()));
+                    }
+                    None => {
+                        println!(
+                            "Cache miss g: {} l: {}",
+                            global_as_hex_string, local_as_hex_string
+                        );
+                        global_and_local_nonces.push(Some((global, local)));
+                        cache_results.push(None);
                     }
                 }
 
                 (global_and_local_nonces, cache_results)
             },
-        );
+        )
+    };
     (global_and_local_nonces, cache_results)
 }
 
-// Update RandomX hashes LRU cache
 fn update_randomx_lru_cache(
     global_and_local_nonces: &[Option<(&[u8], &[u8])>],
-    hashes: &[[u8; 32]],
+    hashes: &[RandomXHash],
 ) {
     for (local_and_global_nonces, hash) in global_and_local_nonces.iter().zip(hashes.iter()) {
         if let Some((global_nonce, local_nonce)) = local_and_global_nonces {
@@ -385,12 +392,13 @@ mod tests {
     use crate::compute_randomx_hashes;
     use crate::get_filtered_nonces_and_cached_results;
     use crate::update_randomx_lru_cache;
+    use crate::RandomXHash;
     use crate::RANDOMX_HASH_LRU_CACHE;
     use crate::RANDOMX_HASH_LRU_CACHE_SIZE;
 
     fn clear_hash_lru_cache() {
         unsafe {
-            let cache_hash_mutex: &Mutex<LruCache<(Vec<u8>, Vec<u8>), [u8; 32]>> =
+            let cache_hash_mutex: &Mutex<LruCache<(Vec<u8>, Vec<u8>), RandomXHash>> =
                 RANDOMX_HASH_LRU_CACHE.get_or_init(|| {
                     let lru_max_size = NonZeroUsize::new(RANDOMX_HASH_LRU_CACHE_SIZE)
                         .expect("LRU max size must be non-zero");
@@ -404,7 +412,7 @@ mod tests {
 
     #[test]
     fn compute_randomx_hashes_simple() {
-        let hex_array: [u8; 32] = [
+        let hex_array: RandomXHash = [
             0x7a, 0x55, 0xef, 0x51, 0x4e, 0x78, 0x14, 0x7c, 0xed, 0x93, 0x28, 0x21, 0x0a, 0x5a,
             0x83, 0x25, 0x2c, 0xaf, 0xa8, 0x96, 0x1e, 0xa1, 0x42, 0x99, 0x4b, 0xe7, 0xbb, 0x85,
             0x18, 0xf6, 0x11, 0x32,
@@ -414,7 +422,7 @@ mod tests {
         let global_nonces = (0..4)
             .into_iter()
             .map(|i| {
-                let mut hex_array: [u8; 32] = [
+                let mut hex_array: RandomXHash = [
                     0x06, 0x48, 0xfb, 0x77, 0x5e, 0x2c, 0x0a, 0xcd, 0xe0, 0xa6, 0x67, 0x09, 0x32,
                     0x89, 0x1c, 0xc5, 0x92, 0x3a, 0x86, 0xba, 0x00, 0x66, 0x25, 0x21, 0x0b, 0x1f,
                     0xc7, 0xc9, 0x1a, 0x04, 0x47, 0x4c,
@@ -450,7 +458,7 @@ mod tests {
         let global_nonces = (0..nonces_num)
             .into_iter()
             .map(|i| {
-                let mut hex_array: [u8; 32] = [
+                let mut hex_array: RandomXHash = [
                     0x06, 0x48, 0xfb, 0x77, 0x5e, 0x2c, 0x0a, 0xcd, 0xe0, 0xa6, 0x67, 0x09, 0x32,
                     0x89, 0x1c, 0xc5, 0x92, 0x3a, 0x86, 0xba, 0x00, 0x66, 0x25, 0x21, 0x0b, 0x1f,
                     0xc7, 0xc9, 0x1a, 0x04, 0x47, 0x4c,
@@ -493,7 +501,7 @@ mod tests {
         let global_nonces = (0..nonces_num)
             .into_iter()
             .map(|i| {
-                let mut hex_array: [u8; 32] = [
+                let mut hex_array: RandomXHash = [
                     0x06, 0x48, 0xfb, 0x77, 0x5e, 0x2c, 0x0a, 0xcd, 0xe0, 0xa6, 0x67, 0x09, 0x32,
                     0x89, 0x1c, 0xc5, 0x92, 0x3a, 0x86, 0xba, 0x00, 0x66, 0x25, 0x21, 0x0b, 0x1f,
                     0xc7, 0xc9, 0x1a, 0x04, 0x47, 0x4c,
@@ -544,7 +552,7 @@ mod tests {
 
         update_randomx_lru_cache(&nonces, &hashes);
         unsafe {
-            let cache_hash_mutex: &Mutex<LruCache<(Vec<u8>, Vec<u8>), [u8; 32]>> =
+            let cache_hash_mutex: &Mutex<LruCache<(Vec<u8>, Vec<u8>), RandomXHash>> =
                 RANDOMX_HASH_LRU_CACHE.get_or_init(|| {
                     let lru_max_size = NonZeroUsize::new(RANDOMX_HASH_LRU_CACHE_SIZE)
                         .expect("LRU max size must be non-zero");
@@ -560,7 +568,7 @@ mod tests {
         update_randomx_lru_cache(&nonces, &hashes);
 
         unsafe {
-            let cache_hash_mutex: &Mutex<LruCache<(Vec<u8>, Vec<u8>), [u8; 32]>> =
+            let cache_hash_mutex: &Mutex<LruCache<(Vec<u8>, Vec<u8>), RandomXHash>> =
                 RANDOMX_HASH_LRU_CACHE.get_or_init(|| {
                     let lru_max_size = NonZeroUsize::new(RANDOMX_HASH_LRU_CACHE_SIZE)
                         .expect("LRU max size must be non-zero");

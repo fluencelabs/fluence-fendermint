@@ -1042,6 +1042,7 @@ dependencies = [
  "fluence-fendermint-shared",
  "fvm",
  "fvm_shared",
+ "hex",
  "lru",
  "num-traits",
  "once_cell",
