@@ -31,11 +31,11 @@ use dashmap::DashMap;
 use fluence_fendermint_shared::BATCHED_HASHES_BYTE_SIZE;
 use lru::LruCache;
 use num_traits::cast::FromPrimitive;
+use once_cell::sync::Lazy;
 use std::collections::HashSet;
 use std::fmt::Display;
 use std::num::NonZeroUsize;
 use std::sync::Mutex;
-use std::sync::OnceLock;
 
 use ccp_randomx::cache::Cache;
 use ccp_randomx::flags::RandomXFlags;
@@ -56,14 +56,19 @@ const ERRORS_BASE: u32 = 0x10000000;
 const RANDOMX_SYSCALL_ERROR_CODE: u32 = 0x10000001;
 const INVALID_LENGTH_ERROR_CODE: u32 = 0x10000002;
 const ARGUMENTS_HAVE_DIFFERENT_LENGTH_ERROR_CODE: u32 = 0x10000002;
+// Cache size can be calculated as
+// q99_batch_processing_time * number_of_concurrent_batches floating in the network
+// meanwhile LRU size is just big.
 const RANDOMX_HASH_LRU_CACHE_SIZE: usize = 1024;
 
 type RandomXHash = [u8; 32];
 type RandomXHashLruMutex = Mutex<LruCache<(Vec<u8>, Vec<u8>), RandomXHash>>;
-type RandomXHashLru = OnceLock<RandomXHashLruMutex>;
 
-// (global, local) -> RandomX hash LRU cache.
-static mut RANDOMX_HASH_LRU_CACHE: RandomXHashLru = OnceLock::new();
+static RANDOMX_HASH_LRU_CACHE: Lazy<RandomXHashLruMutex> = Lazy::new(|| {
+    Mutex::new(LruCache::new(
+        NonZeroUsize::new(RANDOMX_HASH_LRU_CACHE_SIZE).expect("LRU max size must be non-zero"),
+    ))
+});
 
 pub fn run_randomx(
     context: Context<'_, impl Kernel>,
@@ -211,55 +216,39 @@ fn get_filtered_nonces_and_cached_results<'global, 'local>(
     Vec<Option<(&'global [u8], &'local [u8])>>,
     Vec<Option<RandomXHash>>,
 ) {
-    let (global_and_local_nonces, cache_results) = unsafe {
-        let cache_hash_mutex: &RandomXHashLruMutex = RANDOMX_HASH_LRU_CACHE.get_or_init(|| {
-            let lru_max_size = NonZeroUsize::new(RANDOMX_HASH_LRU_CACHE_SIZE)
-                .expect("LRU max size must be non-zero");
-            Mutex::new(LruCache::new(lru_max_size))
-        });
-
-        let mut cache_hash_lru = cache_hash_mutex.lock().unwrap();
-        global_nonces.iter().zip(local_nonces.iter()).fold(
-            (vec![], vec![]),
-            |(mut global_and_local_nonces, mut cache_results), (&global, &local)| {
-                let cache_result = cache_hash_lru.get(&(global.into(), local.into()));
-                match cache_result {
-                    Some(result) => {
-                        global_and_local_nonces.push(None);
-                        cache_results.push(Some(result.to_owned()));
-                    }
-                    None => {
-                        global_and_local_nonces.push(Some((global, local)));
-                        cache_results.push(None);
-                    }
+    let mut cache_hash_lru = RANDOMX_HASH_LRU_CACHE.lock().unwrap();
+    global_nonces.iter().zip(local_nonces.iter()).fold(
+        (vec![], vec![]),
+        |(mut global_and_local_nonces, mut cache_results), (&global, &local)| {
+            let cache_result = cache_hash_lru.get(&(global.into(), local.into()));
+            match cache_result {
+                Some(result) => {
+                    global_and_local_nonces.push(None);
+                    cache_results.push(Some(result.to_owned()));
                 }
+                None => {
+                    global_and_local_nonces.push(Some((global, local)));
+                    cache_results.push(None);
+                }
+            }
 
-                (global_and_local_nonces, cache_results)
-            },
-        )
-    };
-    (global_and_local_nonces, cache_results)
+            (global_and_local_nonces, cache_results)
+        },
+    )
 }
 
 fn update_randomx_lru_cache(
     global_and_local_nonces: &[Option<(&[u8], &[u8])>],
     hashes: &[RandomXHash],
 ) {
-    unsafe {
-        let cache_hash_mutex: &RandomXHashLruMutex = RANDOMX_HASH_LRU_CACHE.get_or_init(|| {
-            let lru_max_size = NonZeroUsize::new(RANDOMX_HASH_LRU_CACHE_SIZE)
-                .expect("LRU max size must be non-zero");
-            Mutex::new(LruCache::new(lru_max_size))
-        });
-        let mut cache = cache_hash_mutex.lock().unwrap();
+    let mut cache_hash_lru = RANDOMX_HASH_LRU_CACHE.lock().unwrap();
 
-        for (local_and_global_nonces, hash) in global_and_local_nonces.iter().zip(hashes.iter()) {
-            if let Some((global_nonce, local_nonce)) = local_and_global_nonces {
-                let _ = cache.put(
-                    ((*global_nonce).to_owned(), (*local_nonce).to_owned()),
-                    *hash,
-                );
-            }
+    for (local_and_global_nonces, hash) in global_and_local_nonces.iter().zip(hashes.iter()) {
+        if let Some((global_nonce, local_nonce)) = local_and_global_nonces {
+            let _ = cache_hash_lru.put(
+                ((*global_nonce).to_owned(), (*local_nonce).to_owned()),
+                *hash,
+            );
         }
     }
 }
@@ -337,31 +326,18 @@ fn execution_error(error_code: u32, message: impl Display) -> ExecutionError {
 
 #[cfg(test)]
 mod tests {
-    use std::num::NonZeroUsize;
-    use std::sync::Mutex;
 
     use ccp_shared::types::{GlobalNonce, LocalNonce};
-    use lru::LruCache;
 
     use crate::compute_randomx_hashes;
     use crate::get_filtered_nonces_and_cached_results;
     use crate::update_randomx_lru_cache;
     use crate::RandomXHash;
     use crate::RANDOMX_HASH_LRU_CACHE;
-    use crate::RANDOMX_HASH_LRU_CACHE_SIZE;
 
     fn clear_hash_lru_cache() {
-        unsafe {
-            let cache_hash_mutex: &Mutex<LruCache<(Vec<u8>, Vec<u8>), RandomXHash>> =
-                RANDOMX_HASH_LRU_CACHE.get_or_init(|| {
-                    let lru_max_size = NonZeroUsize::new(RANDOMX_HASH_LRU_CACHE_SIZE)
-                        .expect("LRU max size must be non-zero");
-                    Mutex::new(LruCache::new(lru_max_size))
-                });
-            let mut cache = cache_hash_mutex.lock().unwrap();
-
-            cache.clear();
-        }
+        let mut cache_hash_lru = RANDOMX_HASH_LRU_CACHE.lock().unwrap();
+        cache_hash_lru.clear();
     }
 
     #[test]
@@ -492,7 +468,6 @@ mod tests {
             .for_each(|cached| assert!(cached.is_none()));
 
         clear_hash_lru_cache();
-        // }
     }
 
     #[test]
@@ -505,15 +480,9 @@ mod tests {
         clear_hash_lru_cache();
 
         update_randomx_lru_cache(&nonces, &hashes);
-        unsafe {
-            let cache_hash_mutex: &Mutex<LruCache<(Vec<u8>, Vec<u8>), RandomXHash>> =
-                RANDOMX_HASH_LRU_CACHE.get_or_init(|| {
-                    let lru_max_size = NonZeroUsize::new(RANDOMX_HASH_LRU_CACHE_SIZE)
-                        .expect("LRU max size must be non-zero");
-                    Mutex::new(LruCache::new(lru_max_size))
-                });
-            let cache = cache_hash_mutex.lock().unwrap();
-            assert_eq!(cache.len(), 1);
+        {
+            let cache_hash_lru = RANDOMX_HASH_LRU_CACHE.lock().unwrap();
+            assert_eq!(cache_hash_lru.len(), 1);
         }
 
         let nonce = LocalNonce::random();
@@ -521,15 +490,9 @@ mod tests {
         let nonces = vec![Some((nonce_buf, nonce_buf))];
         update_randomx_lru_cache(&nonces, &hashes);
 
-        unsafe {
-            let cache_hash_mutex: &Mutex<LruCache<(Vec<u8>, Vec<u8>), RandomXHash>> =
-                RANDOMX_HASH_LRU_CACHE.get_or_init(|| {
-                    let lru_max_size = NonZeroUsize::new(RANDOMX_HASH_LRU_CACHE_SIZE)
-                        .expect("LRU max size must be non-zero");
-                    Mutex::new(LruCache::new(lru_max_size))
-                });
-            let cache = cache_hash_mutex.lock().unwrap();
-            assert_eq!(cache.len(), 2);
+        {
+            let cache_hash_lru = RANDOMX_HASH_LRU_CACHE.lock().unwrap();
+            assert_eq!(cache_hash_lru.len(), 2);
         }
 
         clear_hash_lru_cache();
