@@ -36,7 +36,6 @@ use std::fmt::Display;
 use std::num::NonZeroUsize;
 use std::sync::Mutex;
 use std::sync::OnceLock;
-use std::time::Instant;
 
 use ccp_randomx::cache::Cache;
 use ccp_randomx::flags::RandomXFlags;
@@ -93,8 +92,6 @@ pub fn run_randomx_batched(
     local_nonce_addr: u32,
     local_nonces_len: u32,
 ) -> Result<[u8; BATCHED_HASHES_BYTE_SIZE], ExecutionError> {
-    let start = Instant::now();
-
     // Byte length of arrays must be equal.
     if global_nonces_len != local_nonces_len {
         return Err(execution_error(
@@ -108,12 +105,7 @@ pub fn run_randomx_batched(
     let global_nonces = from_raw(&context, global_nonce_addr, global_nonces_len)?;
     let local_nonces = from_raw(&context, local_nonce_addr, local_nonces_len)?;
 
-    let duration = start.elapsed();
-    println!("run_randomx_batched: from_raw took {:?}", duration);
-
     let hashes = compute_randomx_hashes(global_nonces, local_nonces)?;
-
-    let start = Instant::now();
 
     // Pack the Vec<RandomXHash> into a single [u8; BATCHED_HASHES_BYTE_SIZE]
     let result = [0u8; BATCHED_HASHES_BYTE_SIZE];
@@ -127,9 +119,6 @@ pub fn run_randomx_batched(
             acc
         });
 
-    let duration_pack = start.elapsed();
-    println!("run_randomx_batched: pack took {:?}", duration_pack);
-
     Ok(result)
 }
 
@@ -137,7 +126,6 @@ fn compute_randomx_hashes(
     global_nonces: Vec<&[u8]>,
     local_nonces: Vec<&[u8]>,
 ) -> Result<Vec<RandomXHash>, ExecutionError> {
-    let start = Instant::now();
     let randomx_flags = RandomXFlags::recommended();
 
     let (global_and_local_nonces, cache_results) =
@@ -145,19 +133,7 @@ fn compute_randomx_hashes(
 
     let unique_global_nonces = get_unique_global_nonces(&global_and_local_nonces);
 
-    let duration_g_nonces = start.elapsed();
-    println!(
-        "run_randomx_batched: find unique global nonces took {:?}",
-        duration_g_nonces
-    );
-
     let unique_caches = get_unique_randomx_caches(&unique_global_nonces, randomx_flags);
-
-    let duration_cr_caches = start.elapsed();
-    println!(
-        "run_randomx_batched: create unique caches took {:?}",
-        duration_cr_caches - duration_g_nonces
-    );
 
     let hashes = compute_or_use_cached_randomx_hashes(
         &global_and_local_nonces,
@@ -167,12 +143,6 @@ fn compute_randomx_hashes(
     )?;
 
     update_randomx_lru_cache(&global_and_local_nonces, &hashes);
-
-    let duration_randomx = start.elapsed();
-    println!(
-        "run_randomx_batched: randomx took {:?}",
-        duration_randomx - duration_cr_caches
-    );
 
     Ok(hashes)
 }
@@ -252,29 +222,13 @@ fn get_filtered_nonces_and_cached_results<'global, 'local>(
         global_nonces.iter().zip(local_nonces.iter()).fold(
             (vec![], vec![]),
             |(mut global_and_local_nonces, mut cache_results), (&global, &local)| {
-                // TODO remove explicit types after the measurements are done
-                let global_as_vec: Vec<u8> = global.into();
-                let local_as_vec: Vec<u8> = local.into();
-
-                // TODO remove after the measurements are done
-                let global_as_hex_string = hex::encode(global_as_vec.clone());
-                let local_as_hex_string = hex::encode(local_as_vec.clone());
-
-                let cache_result = cache_hash_lru.get(&(global_as_vec, local_as_vec));
+                let cache_result = cache_hash_lru.get(&(global.into(), local.into()));
                 match cache_result {
                     Some(result) => {
-                        println!(
-                            "Cache hit g: {} l: {}",
-                            global_as_hex_string, local_as_hex_string
-                        );
                         global_and_local_nonces.push(None);
                         cache_results.push(Some(result.to_owned()));
                     }
                     None => {
-                        println!(
-                            "Cache miss g: {} l: {}",
-                            global_as_hex_string, local_as_hex_string
-                        );
                         global_and_local_nonces.push(Some((global, local)));
                         cache_results.push(None);
                     }
@@ -291,16 +245,16 @@ fn update_randomx_lru_cache(
     global_and_local_nonces: &[Option<(&[u8], &[u8])>],
     hashes: &[RandomXHash],
 ) {
-    for (local_and_global_nonces, hash) in global_and_local_nonces.iter().zip(hashes.iter()) {
-        if let Some((global_nonce, local_nonce)) = local_and_global_nonces {
-            unsafe {
-                let cache_hash_mutex: &RandomXHashLruMutex =
-                    RANDOMX_HASH_LRU_CACHE.get_or_init(|| {
-                        let lru_max_size = NonZeroUsize::new(RANDOMX_HASH_LRU_CACHE_SIZE)
-                            .expect("LRU max size must be non-zero");
-                        Mutex::new(LruCache::new(lru_max_size))
-                    });
-                let mut cache = cache_hash_mutex.lock().unwrap();
+    unsafe {
+        let cache_hash_mutex: &RandomXHashLruMutex = RANDOMX_HASH_LRU_CACHE.get_or_init(|| {
+            let lru_max_size = NonZeroUsize::new(RANDOMX_HASH_LRU_CACHE_SIZE)
+                .expect("LRU max size must be non-zero");
+            Mutex::new(LruCache::new(lru_max_size))
+        });
+        let mut cache = cache_hash_mutex.lock().unwrap();
+
+        for (local_and_global_nonces, hash) in global_and_local_nonces.iter().zip(hashes.iter()) {
+            if let Some((global_nonce, local_nonce)) = local_and_global_nonces {
                 let _ = cache.put(
                     ((*global_nonce).to_owned(), (*local_nonce).to_owned()),
                     *hash,
