@@ -31,7 +31,7 @@ fvm_syscalls! {
     pub fn run_randomx_batched(
         global_nonce_addr: *const u32,
         global_nonce_len: u32,
-        local_nonce_addr:*const u32,
+        local_nonce_addr: *const u32,
         local_nonce_len: u32,
     ) -> Result<[u8; crate::BATCHED_HASHES_BYTE_SIZE]>;
 }

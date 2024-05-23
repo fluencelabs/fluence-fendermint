@@ -75,10 +75,11 @@ pub fn run_randomx_batched(
 }
 
 fn to_raw(array: &[BytesDe]) -> Vec<u32> {
-    array.iter().fold(vec![], |mut acc, v| {
+    let mut acc = Vec::with_capacity(2 * array.len());
+    for v in array {
         // This presumes we are in WASM with 32-bit pointers using Little Endian.
         acc.push(v.0.as_slice().as_ptr() as u32);
         acc.push(v.0.len() as u32);
-        acc
-    })
+    }
+    acc
 }
