@@ -37,10 +37,10 @@ pub const SYSCALL_MODULE_NAME: &str = "fluence";
 pub const SYSCALL_FUNCTION_NAME: &str = "run_randomx";
 
 /// Size of a batched RandomX invocation result.
-pub const HASHES_BATCH_SIZE: usize = 256;
+pub const MAX_HASHES_BATCH_SIZE: usize = 512;
 
 /// Size in bytes of a batched RandomX invocation result.
-pub const BATCHED_HASHES_BYTE_SIZE: usize = HASHES_BATCH_SIZE * TARGET_HASH_SIZE;
+pub const BATCHED_HASHES_BYTE_SIZE: usize = MAX_HASHES_BATCH_SIZE * TARGET_HASH_SIZE;
 
 /// Name of a batched version of import function (syscall)
 /// which will be used to call the actual syscall implementation.

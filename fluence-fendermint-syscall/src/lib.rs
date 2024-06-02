@@ -29,7 +29,7 @@
 use ccp_randomx::cache::CacheHandle;
 use dashmap::DashMap;
 use fluence_fendermint_shared::BATCHED_HASHES_BYTE_SIZE;
-use fluence_fendermint_shared::HASHES_BATCH_SIZE;
+use fluence_fendermint_shared::MAX_HASHES_BATCH_SIZE;
 use lru::LruCache;
 use num_traits::cast::FromPrimitive;
 use once_cell::sync::Lazy;
@@ -113,10 +113,10 @@ pub fn run_randomx_batched(
         ));
     }
 
-    if (global_nonces_len as usize) > HASHES_BATCH_SIZE {
+    if (global_nonces_len as usize) > MAX_HASHES_BATCH_SIZE {
         return Err(execution_error(
             INVALID_LENGTH_ERROR_CODE,
-            format!("global_nonces length {global_nonces_len} cannot be larger than {HASHES_BATCH_SIZE}"),
+            format!("global_nonces length {global_nonces_len} cannot be larger than {MAX_HASHES_BATCH_SIZE}"),
         ));
     }
 
