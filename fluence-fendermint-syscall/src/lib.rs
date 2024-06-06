@@ -61,8 +61,8 @@ const TOO_MANY_HASHES_ERROR_CODE: u32 = ERRORS_BASE | 3;
 // meanwhile LRU size is just big.
 const RANDOMX_HASH_LRU_CACHE_SIZE: usize = 1024;
 
-const CACHE_HAS_ELEMENT: &str = "cache has requested element, which enforced by checks";
-const IT_IS_SAFE_TO_LOCK_CACHE: &str = "global cache is save to lock, it's done in single thread";
+const CACHE_HAS_ELEMENT: &str = "cache has requested element, which is enforced by checks";
+const IT_IS_SAFE_TO_LOCK_CACHE: &str = "global cache is safe to lock, it's done in single thread";
 const RAW_OFFSET_AND_LEN_ARE_WELL_DEFINED: &str = "offsets and lengths of nonces are well defined";
 
 type RandomXHash = [u8; 32];
