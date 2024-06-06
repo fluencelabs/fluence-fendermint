@@ -53,13 +53,17 @@ pub use fluence_fendermint_shared::SYSCALL_MODULE_NAME;
 pub use fluence_fendermint_shared::TARGET_HASH_SIZE;
 
 const ERRORS_BASE: u32 = 0x10000000;
-const RANDOMX_SYSCALL_ERROR_CODE: u32 = 0x10000001;
-const INVALID_LENGTH_ERROR_CODE: u32 = 0x10000002;
-const ARGUMENTS_HAVE_DIFFERENT_LENGTH_ERROR_CODE: u32 = 0x10000002;
+const RANDOMX_SYSCALL_ERROR_CODE: u32 = ERRORS_BASE | 1;
+const ARGUMENTS_HAVE_DIFFERENT_LENGTH_ERROR_CODE: u32 = ERRORS_BASE | 2;
+const TOO_MANY_HASHES_ERROR_CODE: u32 = ERRORS_BASE | 3;
 // Cache size can be calculated as
 // q99_batch_processing_time * number_of_concurrent_batches floating in the network
 // meanwhile LRU size is just big.
 const RANDOMX_HASH_LRU_CACHE_SIZE: usize = 1024;
+
+const CACHE_HAS_ELEMENT: &str = "cache has requested element, which enforced by checks";
+const IT_IS_SAFE_TO_LOCK_CACHE: &str = "global cache is save to lock, it's done in single thread";
+const RAW_OFFSET_AND_LEN_ARE_WELL_DEFINED: &str = "offsets and lengths of nonces are well defined";
 
 type RandomXHash = [u8; 32];
 type RandomXHashLruMutex = Mutex<LruCache<(Vec<u8>, Vec<u8>), RandomXHash>>;
@@ -117,13 +121,13 @@ pub fn run_randomx_batched(
 
     if (global_nonces_len as usize) > MAX_HASHES_BATCH_SIZE {
         return Err(execution_error(
-            INVALID_LENGTH_ERROR_CODE,
+            TOO_MANY_HASHES_ERROR_CODE,
             format!("global_nonces length {global_nonces_len} cannot be larger than {MAX_HASHES_BATCH_SIZE}"),
         ));
     }
 
-    let global_nonces = from_raw(&context, global_nonce_addr, global_nonces_len)?;
-    let local_nonces = from_raw(&context, local_nonce_addr, local_nonces_len)?;
+    let global_nonces = deserialize_nonces(&context, global_nonce_addr, global_nonces_len)?;
+    let local_nonces = deserialize_nonces(&context, local_nonce_addr, local_nonces_len)?;
 
     let hashes = compute_randomx_hashes(global_nonces, local_nonces)?;
 
@@ -144,7 +148,7 @@ fn compute_randomx_hashes(
     let randomx_flags = RandomXFlags::recommended();
 
     let cache_outcomes = get_filtered_nonces_and_cached_results(&global_nonces, &local_nonces);
-    let unique_global_nonces = get_unique_global_nonces(&cache_outcomes);
+    let unique_global_nonces = get_global_nonce_cache_misses(&cache_outcomes);
     let unique_caches = get_unique_randomx_caches(&unique_global_nonces, randomx_flags);
 
     let hashes =
@@ -169,7 +173,7 @@ fn compute_or_use_cached_randomx_hashes<'nonces>(
                 global_nonce,
                 local_nonce,
             } => {
-                let randomx_cache = unique_caches.get(global_nonce).unwrap();
+                let randomx_cache = unique_caches.get(global_nonce).expect(CACHE_HAS_ELEMENT);
                 compute_randomx_hash_with_cache(randomx_flags, randomx_cache.handle(), local_nonce)
             }
         })
@@ -194,7 +198,7 @@ fn get_unique_randomx_caches(
     unique_caches
 }
 
-fn get_unique_global_nonces(cache_outcomes: &[CacheOutcome<'_>]) -> HashSet<Vec<u8>> {
+fn get_global_nonce_cache_misses(cache_outcomes: &[CacheOutcome<'_>]) -> HashSet<Vec<u8>> {
     cache_outcomes
         .iter()
         .filter_map(|el| match el {
@@ -208,7 +212,9 @@ fn get_filtered_nonces_and_cached_results<'nonce>(
     global_nonces: &[&'nonce [u8]],
     local_nonces: &[&'nonce [u8]],
 ) -> Vec<CacheOutcome<'nonce>> {
-    let mut cache_hash_lru = RANDOMX_HASH_LRU_CACHE.lock().unwrap();
+    let mut cache_hash_lru = RANDOMX_HASH_LRU_CACHE
+        .lock()
+        .expect(IT_IS_SAFE_TO_LOCK_CACHE);
 
     global_nonces
         .iter()
@@ -227,7 +233,9 @@ fn get_filtered_nonces_and_cached_results<'nonce>(
 }
 
 fn update_randomx_lru_cache(global_and_local_nonces: &[CacheOutcome<'_>], hashes: &[RandomXHash]) {
-    let mut cache_hash_lru = RANDOMX_HASH_LRU_CACHE.lock().unwrap();
+    let mut cache_hash_lru = RANDOMX_HASH_LRU_CACHE
+        .lock()
+        .expect(IT_IS_SAFE_TO_LOCK_CACHE);
 
     for (local_and_global_nonces, hash) in global_and_local_nonces.iter().zip(hashes.iter()) {
         if let CacheOutcome::Miss {
@@ -267,58 +275,56 @@ fn compute_randomx_hash_with_cache(
     Ok(vm.hash(local_nonce).into_slice())
 }
 
-fn from_raw<'context>(
+fn deserialize_nonces<'context>(
     context: &'context Context<'_, impl Kernel>,
-    offset: u32,
-    len: u32,
+    elements_offset: u32,
+    elements_count: u32,
 ) -> Result<Vec<&'context [u8]>, ExecutionError> {
     use fvm::kernel::ClassifyResult;
 
-    // Here we process (u32, u32) pairs array created by SDK part in WASM.
-    // The first u32 is a pointer to nonce buffer, the second u32 is a length of nonce buffer.
-    // This invariant means that every (u32,u32) pair uses 4 + 4 bytes.
-    if len % 8 != 0 {
-        return Err(execution_error(
-            INVALID_LENGTH_ERROR_CODE,
-            format!("array length is {}, it's not dividable by 8", len),
-        ));
-    }
+    // multiply by 8 b/c every element is array and passed as a pair of (offset, len)
+    let elements_array_byte_length = 8 * elements_count as usize;
 
     // Get the outter array data from the memory allocated in wasm runtime.
     let raw_result = context
         .memory
-        .get(offset as usize..)
-        .and_then(|data| data.get(..len as usize))
-        .ok_or_else(|| format!("buffer {} (length {}) out of bounds", offset, len))
+        .get(elements_offset as usize..)
+        .and_then(|data| data.get(..elements_array_byte_length))
+        .ok_or_else(|| {
+            format!(
+                "buffer {} (length {}) out of bounds",
+                elements_offset, elements_count
+            )
+        })
         .or_error(ErrorNumber::IllegalArgument)?;
 
-    let mut result = Vec::new();
-    let number_of_elements = len / 8;
+    let mut de_nonces = Vec::with_capacity(elements_count as usize);
     // Process the array of (u32, u32) pairs.
-    for element_id in 0..number_of_elements {
+    for element_id in 0..elements_count {
         let element_offset = (element_id * 8) as usize;
         // This presumes we are in WASM with 32-bit pointers using Little Endian.
-        let addr = u32::from_le_bytes(
+        let offset = u32::from_le_bytes(
             raw_result[element_offset..(element_offset + 4)]
                 .try_into()
-                .unwrap(),
+                .expect(RAW_OFFSET_AND_LEN_ARE_WELL_DEFINED),
         );
         let length = u32::from_le_bytes(
             raw_result[element_offset + 4..element_offset + 8]
                 .try_into()
-                .unwrap(),
+                .expect(RAW_OFFSET_AND_LEN_ARE_WELL_DEFINED),
         );
 
         // Get Nonce buffer from the memory allocated in wasm runtime.
-        let nonce_buf_from_wasm = context.memory.try_slice(addr, length)?;
-        result.push(nonce_buf_from_wasm)
+        let nonce_buf_from_wasm = context.memory.try_slice(offset, length)?;
+        de_nonces.push(nonce_buf_from_wasm)
     }
 
-    Ok(result)
+    Ok(de_nonces)
 }
 
 fn execution_error(error_code: u32, message: impl Display) -> ExecutionError {
-    let error_number = ErrorNumber::from_u32(error_code - ERRORS_BASE).unwrap();
+    let error_number = ErrorNumber::from_u32(error_code - ERRORS_BASE)
+        .expect("error codes are guaranteed to be less than maximum number");
     let syscall_error = SyscallError::new(error_number, message);
     ExecutionError::Syscall(syscall_error)
 }

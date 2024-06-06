@@ -51,35 +51,33 @@ pub fn run_randomx(
 /// Run RandomX in the light mode with the supplied global (K) and local (H) nonce,
 /// return its result hash.
 /// The serialized global and local nonces vectors are passed to syscall as *const u8.
+/// Actor will return a error if more than MAX_HASHES_BATCH_SIZE hashes supplied.
 pub fn run_randomx_batched(
     global_nonce: &[BytesDe],
     local_nonce: &[BytesDe],
 ) -> Result<[u8; BATCHED_HASHES_BYTE_SIZE], fvm_shared::error::ErrorNumber> {
-    let global_nonce_raw = to_raw(global_nonce);
-    let global_ptr = global_nonce_raw.as_slice().as_ptr();
-    // The multiplier 8 here means every element is (u32, u32) pair.
-    let global_nonce_raw_byte_len = (global_nonce.len() * 8) as u32;
-    let local_nonce_raw = to_raw(local_nonce);
-    let local_ptr = local_nonce_raw.as_slice().as_ptr();
-    // The multiplier 8 here means every element is (u32, u32) pair.
-    let local_nonce_raw_byte_len = (local_nonce.len() * 8) as u32;
+    let global_nonce_raw = serialize_nonces(global_nonce);
+    let global_nonce_raw_ptr = global_nonce_raw.as_slice().as_ptr();
+    let local_nonce_raw = serialize_nonces(local_nonce);
+    let local_nonce_raw_ptr = local_nonce_raw.as_slice().as_ptr();
 
     unsafe {
         sys::run_randomx_batched(
-            global_ptr,
-            global_nonce_raw_byte_len,
-            local_ptr,
-            local_nonce_raw_byte_len,
+            global_nonce_raw_ptr,
+            global_nonce.len() as u32,
+            local_nonce_raw_ptr,
+            local_nonce.len() as u32,
         )
     }
 }
 
-fn to_raw(array: &[BytesDe]) -> Vec<u32> {
-    let mut acc = Vec::with_capacity(2 * array.len());
-    for v in array {
+fn serialize_nonces(nonces: &[BytesDe]) -> Vec<u32> {
+    let mut se_nonces = Vec::with_capacity(2 * nonces.len());
+    for nonce in nonces {
         // This presumes we are in WASM with 32-bit pointers using Little Endian.
-        acc.push(v.0.as_slice().as_ptr() as u32);
-        acc.push(v.0.len() as u32);
+        se_nonces.push(nonce.0.as_slice().as_ptr() as u32);
+        se_nonces.push(nonce.0.len() as u32);
     }
-    acc
+
+    se_nonces
 }
