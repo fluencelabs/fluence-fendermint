@@ -14,6 +14,18 @@
  * limitations under the License.
  */
 
+#![warn(rust_2018_idioms)]
+#![warn(rust_2021_compatibility)]
+#![deny(
+    dead_code,
+    nonstandard_style,
+    unused_imports,
+    unused_mut,
+    unused_variables,
+    unused_unsafe,
+    unreachable_patterns
+)]
+
 /// Size in bytes of a result of RandomX invocation, which is basically a hash.
 pub const TARGET_HASH_SIZE: usize = 32;
 
@@ -23,3 +35,13 @@ pub const SYSCALL_MODULE_NAME: &str = "fluence";
 /// Name of the import function (syscall)
 /// which will be used to call the actual syscall implementation.
 pub const SYSCALL_FUNCTION_NAME: &str = "run_randomx";
+
+/// Size of a batched RandomX invocation result.
+pub const MAX_HASHES_BATCH_SIZE: usize = 512;
+
+/// Size in bytes of a batched RandomX invocation result.
+pub const BATCHED_HASHES_BYTE_SIZE: usize = MAX_HASHES_BATCH_SIZE * TARGET_HASH_SIZE;
+
+/// Name of a batched version of import function (syscall)
+/// which will be used to call the actual syscall implementation.
+pub const BATCHED_SYSCALL_FUNCTION_NAME: &str = "run_randomx_batched";
