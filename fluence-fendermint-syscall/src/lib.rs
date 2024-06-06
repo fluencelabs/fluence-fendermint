@@ -104,30 +104,30 @@ pub fn run_randomx_batched(
     context: Context<'_, impl Kernel>,
     // Pointer to vector of global nonces represented as Vec<Vec<u8>>.
     global_nonce_addr: u32,
-    global_nonces_len: u32,
+    global_nonces_count: u32,
     // Pointer to vector of local nonces represented as Vec<Vec<u8>>.
     local_nonce_addr: u32,
-    local_nonces_len: u32,
+    local_nonces_count: u32,
 ) -> Result<[u8; BATCHED_HASHES_BYTE_SIZE], ExecutionError> {
     // Byte length of arrays must be equal.
-    if global_nonces_len != local_nonces_len {
+    if global_nonces_count != local_nonces_count {
         return Err(execution_error(
             ARGUMENTS_HAVE_DIFFERENT_LENGTH_ERROR_CODE,
             format!(
-                "global_nonces length {global_nonces_len}, local_nonces length {local_nonces_len}"
+                "global nonces count {global_nonces_count}, local nonces count {local_nonces_count}"
             ),
         ));
     }
 
-    if (global_nonces_len as usize) > MAX_HASHES_BATCH_SIZE {
+    if (global_nonces_count as usize) > MAX_HASHES_BATCH_SIZE {
         return Err(execution_error(
             TOO_MANY_HASHES_ERROR_CODE,
-            format!("global_nonces length {global_nonces_len} cannot be larger than {MAX_HASHES_BATCH_SIZE}"),
+            format!("global_nonces length {global_nonces_count} cannot be larger than {MAX_HASHES_BATCH_SIZE}"),
         ));
     }
 
-    let global_nonces = deserialize_nonces(&context, global_nonce_addr, global_nonces_len)?;
-    let local_nonces = deserialize_nonces(&context, local_nonce_addr, local_nonces_len)?;
+    let global_nonces = deserialize_nonces(&context, global_nonce_addr, global_nonces_count)?;
+    let local_nonces = deserialize_nonces(&context, local_nonce_addr, local_nonces_count)?;
 
     let hashes = compute_randomx_hashes(global_nonces, local_nonces)?;
 
@@ -148,8 +148,8 @@ fn compute_randomx_hashes(
     let randomx_flags = RandomXFlags::recommended();
 
     let cache_outcomes = get_filtered_nonces_and_cached_results(&global_nonces, &local_nonces);
-    let unique_global_nonces = get_global_nonce_cache_misses(&cache_outcomes);
-    let unique_caches = get_unique_randomx_caches(&unique_global_nonces, randomx_flags);
+    let global_nonce_cache_misses = get_global_nonce_cache_misses(&cache_outcomes);
+    let unique_caches = get_unique_randomx_caches(&global_nonce_cache_misses, randomx_flags);
 
     let hashes =
         compute_or_use_cached_randomx_hashes(&cache_outcomes, randomx_flags, &unique_caches)?;
@@ -181,14 +181,14 @@ fn compute_or_use_cached_randomx_hashes<'nonces>(
 }
 
 fn get_unique_randomx_caches(
-    unique_global_nonces: &HashSet<Vec<u8>>,
+    global_nonce_cache_misses: &HashSet<Vec<u8>>,
     randomx_flags: RandomXFlags,
 ) -> DashMap<&[u8], Cache> {
     use rayon::prelude::*;
 
     let unique_caches: DashMap<&[u8], Cache> = DashMap::new();
 
-    unique_global_nonces
+    global_nonce_cache_misses
         .par_iter()
         .for_each(|unique_global_nonce| {
             let cache = Cache::new(unique_global_nonce, randomx_flags)
