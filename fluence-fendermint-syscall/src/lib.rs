@@ -26,30 +26,28 @@
     unreachable_patterns
 )]
 
-use ccp_randomx::cache::CacheHandle;
-use dashmap::DashMap;
-use fluence_fendermint_shared::BATCHED_HASHES_BYTE_SIZE;
-use fluence_fendermint_shared::MAX_HASHES_BATCH_SIZE;
-use lru::LruCache;
-use num_traits::cast::FromPrimitive;
-use once_cell::sync::Lazy;
 use std::collections::HashSet;
 use std::fmt::Display;
 use std::num::NonZeroUsize;
 use std::sync::Mutex;
-use std::time::Instant;
 
-use ccp_randomx::cache::Cache;
-use ccp_randomx::flags::RandomXFlags;
-use ccp_randomx::vm::RandomXVM;
-
+use dashmap::DashMap;
 use fvm::kernel::ExecutionError;
 use fvm::kernel::Kernel;
 use fvm::kernel::SyscallError;
 use fvm::syscalls::Context;
 use fvm_shared::error::ErrorNumber;
+use lru::LruCache;
+use num_traits::cast::FromPrimitive;
+use once_cell::sync::Lazy;
 
+use ccp_randomx::cache::Cache;
+use ccp_randomx::cache::CacheHandle;
+use ccp_randomx::flags::RandomXFlags;
+use ccp_randomx::vm::RandomXVM;
+use fluence_fendermint_shared::BATCHED_HASHES_BYTE_SIZE;
 pub use fluence_fendermint_shared::BATCHED_SYSCALL_FUNCTION_NAME;
+use fluence_fendermint_shared::MAX_HASHES_BATCH_SIZE;
 pub use fluence_fendermint_shared::SYSCALL_FUNCTION_NAME;
 pub use fluence_fendermint_shared::SYSCALL_MODULE_NAME;
 pub use fluence_fendermint_shared::TARGET_HASH_SIZE;
@@ -107,8 +105,6 @@ pub fn run_randomx_batched(
     local_nonce_addr: u32,
     local_nonces_len: u32,
 ) -> Result<[u8; BATCHED_HASHES_BYTE_SIZE], ExecutionError> {
-    let overall_actor_start_time = Instant::now();
-
     // Byte length of arrays must be equal.
     if global_nonces_len != local_nonces_len {
         return Err(execution_error(
@@ -126,35 +122,17 @@ pub fn run_randomx_batched(
         ));
     }
 
-    let started = Instant::now();
     let global_nonces = from_raw(&context, global_nonce_addr, global_nonces_len)?;
     let local_nonces = from_raw(&context, local_nonce_addr, local_nonces_len)?;
-    let from_raw_duration = started.elapsed();
-    println!(
-        "randomx_batched_duration: arguments_unpacking took {}",
-        from_raw_duration.as_millis()
-    );
 
     let hashes = compute_randomx_hashes(global_nonces, local_nonces)?;
 
     // Pack the Vec<RandomXHash> into a single [u8; BATCHED_HASHES_BYTE_SIZE]
     let mut result = [0u8; BATCHED_HASHES_BYTE_SIZE];
 
-    let started = Instant::now();
     for (chunk, hash) in result.chunks_mut(TARGET_HASH_SIZE).zip(&hashes) {
         chunk.copy_from_slice(hash)
     }
-    let packing_duration = started.elapsed();
-    println!(
-        "randomx_batched_duration: result_packing took {}",
-        packing_duration.as_millis()
-    );
-
-    let overall_actor_duration = overall_actor_start_time.elapsed();
-    println!(
-        "randomx_batched_duration: overall_actor_time took {}",
-        overall_actor_duration.as_millis()
-    );
 
     Ok(result)
 }
@@ -165,36 +143,12 @@ fn compute_randomx_hashes(
 ) -> Result<Vec<RandomXHash>, ExecutionError> {
     let randomx_flags = RandomXFlags::recommended();
 
-    let started = Instant::now();
     let cache_outcomes = get_filtered_nonces_and_cached_results(&global_nonces, &local_nonces);
-    let cache_filter_duration = started.elapsed();
-    println!(
-        "randomx_batched_duration: cache_init took {}",
-        cache_filter_duration.as_millis()
-    );
-
-    let cache_misses = cache_outcomes
-        .iter()
-        .map(|outcome| matches!(outcome, CacheOutcome::Miss { .. }))
-        .count();
-    let cache_hits = cache_outcomes.len() - cache_misses;
-    println!(
-        "randomx_batched_log: cache misses {}, cache hits {}",
-        cache_misses, cache_hits
-    );
-
     let unique_global_nonces = get_unique_global_nonces(&cache_outcomes);
     let unique_caches = get_unique_randomx_caches(&unique_global_nonces, randomx_flags);
 
-    let started = Instant::now();
     let hashes =
         compute_or_use_cached_randomx_hashes(&cache_outcomes, randomx_flags, &unique_caches)?;
-    let hash_compute_duration = started.elapsed();
-    println!(
-        "randomx_batched_duration: hash_compute took {}",
-        hash_compute_duration.as_millis()
-    );
-
     update_randomx_lru_cache(&cache_outcomes, &hashes);
 
     Ok(hashes)
