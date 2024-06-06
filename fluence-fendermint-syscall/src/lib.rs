@@ -152,7 +152,7 @@ pub fn run_randomx_batched(
 
     let overall_actor_duration = overall_actor_start_time.elapsed();
     println!(
-        "randomx_batched_duration: overall_actor_time {}",
+        "randomx_batched_duration: overall_actor_time took {}",
         overall_actor_duration.as_millis()
     );
 
