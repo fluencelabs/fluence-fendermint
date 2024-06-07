@@ -30,6 +30,7 @@ use std::collections::HashSet;
 use std::fmt::Display;
 use std::num::NonZeroUsize;
 use std::sync::Mutex;
+use std::time::Instant;
 
 use dashmap::DashMap;
 use fvm::kernel::ExecutionError;
@@ -109,6 +110,8 @@ pub fn run_randomx_batched(
     local_nonce_addr: u32,
     local_nonces_count: u32,
 ) -> Result<[u8; BATCHED_HASHES_BYTE_SIZE], ExecutionError> {
+    let overall_actor_start_time = Instant::now();
+
     // Byte length of arrays must be equal.
     if global_nonces_count != local_nonces_count {
         return Err(execution_error(
@@ -126,17 +129,35 @@ pub fn run_randomx_batched(
         ));
     }
 
+    let started = Instant::now();
     let global_nonces = deserialize_nonces(&context, global_nonce_addr, global_nonces_count)?;
     let local_nonces = deserialize_nonces(&context, local_nonce_addr, local_nonces_count)?;
+    let deserialization_duration = started.elapsed();
+    println!(
+        "randomx_batched_duration: arguments_unpacking took {}",
+        deserialization_duration.as_millis()
+    );
 
     let hashes = compute_randomx_hashes(global_nonces, local_nonces)?;
 
     // Pack the Vec<RandomXHash> into a single [u8; BATCHED_HASHES_BYTE_SIZE]
     let mut result = [0u8; BATCHED_HASHES_BYTE_SIZE];
 
+    let started = Instant::now();
     for (chunk, hash) in result.chunks_mut(TARGET_HASH_SIZE).zip(&hashes) {
         chunk.copy_from_slice(hash)
     }
+    let packing_duration = started.elapsed();
+    println!(
+        "randomx_batched_duration: result_packing took {}",
+        packing_duration.as_millis()
+    );
+
+    let overall_actor_duration = overall_actor_start_time.elapsed();
+    println!(
+        "randomx_batched_duration: overall_actor_time {}",
+        overall_actor_duration.as_millis()
+    );
 
     Ok(result)
 }
@@ -147,12 +168,35 @@ fn compute_randomx_hashes(
 ) -> Result<Vec<RandomXHash>, ExecutionError> {
     let randomx_flags = RandomXFlags::recommended();
 
+    let started = Instant::now();
     let cache_outcomes = get_filtered_nonces_and_cached_results(&global_nonces, &local_nonces);
+    let cache_filter_duration = started.elapsed();
+    println!(
+        "randomx_batched_duration: cache_init took {}",
+        cache_filter_duration.as_millis()
+    );
+
     let global_nonce_cache_misses = get_global_nonce_cache_misses(&cache_outcomes);
     let unique_caches = get_unique_randomx_caches(&global_nonce_cache_misses, randomx_flags);
+    let cache_misses = cache_outcomes
+        .iter()
+        .map(|outcome| matches!(outcome, CacheOutcome::Miss { .. }))
+        .count();
+    let cache_hits = cache_outcomes.len() - cache_misses;
+    println!(
+        "randomx_batched_log: cache misses {}, cache hits {}",
+        cache_misses, cache_hits
+    );
 
+    let started = Instant::now();
     let hashes =
         compute_or_use_cached_randomx_hashes(&cache_outcomes, randomx_flags, &unique_caches)?;
+    let hash_compute_duration = started.elapsed();
+    println!(
+        "randomx_batched_duration: hash_compute took {}",
+        hash_compute_duration.as_millis()
+    );
+
     update_randomx_lru_cache(&cache_outcomes, &hashes);
 
     Ok(hashes)
