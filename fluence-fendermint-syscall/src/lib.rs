@@ -135,7 +135,7 @@ pub fn run_randomx_batched(
     let deserialization_duration = started.elapsed();
     println!(
         "randomx_batched_duration: arguments_unpacking took {}",
-        deserialization_duration.as_millis()
+        deserialization_duration.as_nanos() as f64 / 1_000_000f64
     );
 
     let hashes = compute_randomx_hashes(global_nonces, local_nonces)?;
@@ -150,13 +150,13 @@ pub fn run_randomx_batched(
     let packing_duration = started.elapsed();
     println!(
         "randomx_batched_duration: result_packing took {}",
-        packing_duration.as_millis()
+        packing_duration.as_nanos() as f64 / 1_000_000f64
     );
 
     let overall_actor_duration = overall_actor_start_time.elapsed();
     println!(
         "randomx_batched_duration: overall_actor_time {}",
-        overall_actor_duration.as_millis()
+        overall_actor_duration.as_nanos() as f64 / 1_000_000f64
     );
 
     Ok(result)
@@ -173,14 +173,14 @@ fn compute_randomx_hashes(
     let cache_filter_duration = started.elapsed();
     println!(
         "randomx_batched_duration: cache_init took {}",
-        cache_filter_duration.as_millis()
+        cache_filter_duration.as_nanos() as f64 / 1_000_000f64
     );
 
     let global_nonce_cache_misses = get_global_nonce_cache_misses(&cache_outcomes);
     let unique_caches = get_unique_randomx_caches(&global_nonce_cache_misses, randomx_flags);
     let cache_misses = cache_outcomes
         .iter()
-        .map(|outcome| matches!(outcome, CacheOutcome::Miss { .. }))
+        .filter(|outcome| matches!(outcome, CacheOutcome::Miss { .. }))
         .count();
     let cache_hits = cache_outcomes.len() - cache_misses;
     println!(
@@ -194,7 +194,7 @@ fn compute_randomx_hashes(
     let hash_compute_duration = started.elapsed();
     println!(
         "randomx_batched_duration: hash_compute took {}",
-        hash_compute_duration.as_millis()
+        hash_compute_duration.as_nanos() as f64 / 1_000_000f64
     );
 
     update_randomx_lru_cache(&cache_outcomes, &hashes);
