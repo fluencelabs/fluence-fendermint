@@ -112,6 +112,8 @@ pub fn run_randomx_batched(
 ) -> Result<[u8; BATCHED_HASHES_BYTE_SIZE], ExecutionError> {
     let overall_actor_start_time = Instant::now();
 
+    println!("randomx_batched_log: actor was invoked with {global_nonces_len} nonces");
+
     // Byte length of arrays must be equal.
     if global_nonces_count != local_nonces_count {
         return Err(execution_error(
@@ -180,7 +182,7 @@ fn compute_randomx_hashes(
     let filter_duration = started.elapsed();
     println!(
         "randomx_batched_duration: filter took {}",
-        filter_duration.as_millis()
+        filter_duration.as_nanos() as f64 / 1_000_000f64
     );
 
     println!(
@@ -193,7 +195,7 @@ fn compute_randomx_hashes(
     let cache_init_duration = started.elapsed();
     println!(
         "randomx_batched_duration: cache_init took {}",
-        cache_init_duration.as_millis()
+        cache_init_duration.as_nanos() as f64 / 1_000_000f64
     );
 
     let started = Instant::now();
@@ -210,7 +212,7 @@ fn compute_randomx_hashes(
     let lru_update_duration = started.elapsed();
     println!(
         "randomx_batched_duration: lru_update took {}",
-        lru_update_duration.as_millis()
+        lru_update_duration.as_nanos() as f64 / 1_000_000f64
     );
 
     Ok(hashes)
