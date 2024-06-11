@@ -170,22 +170,30 @@ fn compute_randomx_hashes(
 
     let started = Instant::now();
     let cache_outcomes = get_filtered_nonces_and_cached_results(&global_nonces, &local_nonces);
-    let cache_filter_duration = started.elapsed();
-    println!(
-        "randomx_batched_duration: cache_init took {}",
-        cache_filter_duration.as_nanos() as f64 / 1_000_000f64
-    );
 
     let global_nonce_cache_misses = get_global_nonce_cache_misses(&cache_outcomes);
-    let unique_caches = get_unique_randomx_caches(&global_nonce_cache_misses, randomx_flags);
     let cache_misses = cache_outcomes
         .iter()
         .filter(|outcome| matches!(outcome, CacheOutcome::Miss { .. }))
         .count();
     let cache_hits = cache_outcomes.len() - cache_misses;
+    let filter_duration = started.elapsed();
+    println!(
+        "randomx_batched_duration: filter took {}",
+        filter_duration.as_millis()
+    );
+
     println!(
         "randomx_batched_log: cache misses {}, cache hits {}",
         cache_misses, cache_hits
+    );
+
+    let started = Instant::now();
+    let unique_caches = get_unique_randomx_caches(&global_nonce_cache_misses, randomx_flags);
+    let cache_init_duration = started.elapsed();
+    println!(
+        "randomx_batched_duration: cache_init took {}",
+        cache_init_duration.as_millis()
     );
 
     let started = Instant::now();
@@ -197,7 +205,13 @@ fn compute_randomx_hashes(
         hash_compute_duration.as_nanos() as f64 / 1_000_000f64
     );
 
+    let started = Instant::now();
     update_randomx_lru_cache(&cache_outcomes, &hashes);
+    let lru_update_duration = started.elapsed();
+    println!(
+        "randomx_batched_duration: lru_update took {}",
+        lru_update_duration.as_millis()
+    );
 
     Ok(hashes)
 }
