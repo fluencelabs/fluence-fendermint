@@ -112,7 +112,7 @@ pub fn run_randomx_batched(
 ) -> Result<[u8; BATCHED_HASHES_BYTE_SIZE], ExecutionError> {
     let overall_actor_start_time = Instant::now();
 
-    println!("randomx_batched_log: actor was invoked with {global_nonces_len} nonces");
+    println!("randomx_batched_log: actor was invoked with {global_nonces_count} nonces");
 
     // Byte length of arrays must be equal.
     if global_nonces_count != local_nonces_count {
